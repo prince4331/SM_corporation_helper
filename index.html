@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SM Corporation - Chalan & Bill Generator</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Input Form Section -->
+        <section id="input-section" class="input-section">
+            <div class="form-header">
+                <img src="logo.png" alt="SM Corporation Logo" class="form-logo">
+                <h1 id="form-title">Chalan Generator</h1>
+                <p class="subtitle">SM Corporation - Generate Professional Documents</p>
+                
+                <!-- Mode Toggle -->
+                <div class="mode-toggle">
+                    <button type="button" class="mode-btn active" data-mode="chalan">Chalan</button>
+                    <button type="button" class="mode-btn" data-mode="bill">Bill</button>
+                </div>
+            </div>
+
+            <form id="chalan-form">
+                <!-- Header Info -->
+                <div class="form-group-row">
+                    <div class="form-group">
+                        <label for="chalanNo" id="docNoLabel">Chalan No</label>
+                        <input type="text" id="chalanNo" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label for="date">Date</label>
+                        <input type="date" id="date" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="poNo">P/O</label>
+                        <input type="text" id="poNo" placeholder="Purchase Order No.">
+                    </div>
+                </div>
+
+                <!-- Customer Info -->
+                <div class="form-group-row">
+                    <div class="form-group flex-2">
+                        <label for="customerName">Name</label>
+                        <input type="text" id="customerName" placeholder="Customer Name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="customerPhone">Phone</label>
+                        <input type="tel" id="customerPhone" placeholder="Phone Number">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="customerAddress">Address</label>
+                    <input type="text" id="customerAddress" placeholder="Customer Address">
+                </div>
+
+                <!-- Items Section -->
+                <div class="items-section">
+                    <div class="items-header">
+                        <h3>Items</h3>
+                        <button type="button" id="addItemBtn" class="btn-add">
+                            <span>+</span> Add Item
+                        </button>
+                    </div>
+
+                    <div class="items-table-container">
+                        <table class="items-input-table">
+                            <thead id="itemsTableHead">
+                                <tr>
+                                    <th>Sl.</th>
+                                    <th>Description</th>
+                                    <th class="chalan-only">Origin</th>
+                                    <th class="chalan-only">Packaging</th>
+                                    <th>Quantity</th>
+                                    <th class="bill-only" style="display:none;">Rate/Kg</th>
+                                    <th class="bill-only" style="display:none;">Amount</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="itemsTableBody">
+                                <tr>
+                                    <td class="sl-no">1</td>
+                                    <td><input type="text" class="item-desc" placeholder="Item description"></td>
+                                    <td class="chalan-only"><input type="text" class="item-origin" placeholder="Origin"></td>
+                                    <td class="chalan-only"><input type="text" class="item-packaging" placeholder="Packaging"></td>
+                                    <td><input type="text" class="item-quantity" placeholder="Qty"></td>
+                                    <td class="bill-only" style="display:none;"><input type="number" class="item-rate" placeholder="Rate" step="0.01"></td>
+                                    <td class="bill-only" style="display:none;"><input type="number" class="item-amount" placeholder="Amount" step="0.01" readonly></td>
+                                    <td><button type="button" class="btn-remove" onclick="removeItem(this)">×</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="unit-selector">
+                        <label for="quantityUnit">Quantity Unit:</label>
+                        <select id="quantityUnit">
+                            <option value="kg">kg (Kilogram)</option>
+                            <option value="liter">liter (Litre)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="form-actions">
+                    <button type="button" id="generateBtn" class="btn-primary">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                            <polyline points="10 9 9 9 8 9"></polyline>
+                        </svg>
+                        <span id="generateBtnText">Generate Chalan</span>
+                    </button>
+                    <button type="button" id="viewSavedBtn" class="btn-secondary">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z">
+                            </path>
+                        </svg>
+                        View Saved Chalans
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- Saved Chalans Section -->
+        <section id="saved-section" class="saved-section hidden">
+            <div class="saved-header">
+                <h2 id="savedSectionTitle">Saved Chalans</h2>
+                <button type="button" id="backToFormBtn" class="btn-back">← Back to Form</button>
+            </div>
+            <div id="savedChalansList" class="saved-list">
+                <!-- Saved chalans will be rendered here -->
+            </div>
+        </section>
+
+        <!-- Chalan Preview Section -->
+        <section id="preview-section" class="preview-section hidden">
+            <div class="preview-controls no-print">
+                <button type="button" id="printBtn" class="btn-primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                        <rect x="6" y="14" width="12" height="8"></rect>
+                    </svg>
+                    <span id="printBtnText">Print Chalan</span>
+                </button>
+                <button type="button" id="downloadPdfBtn" class="btn-success">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    Download PDF
+                </button>
+                <button type="button" id="newChalanBtn" class="btn-secondary">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    <span id="newDocBtnText">New Chalan</span>
+                </button>
+            </div>
+
+            <div id="chalan-preview" class="chalan-paper">
+                <!-- Chalan content will be generated here -->
+            </div>
+        </section>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
