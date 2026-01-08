@@ -24,6 +24,7 @@ const newChalanBtn = document.getElementById('newChalanBtn');
 const STORAGE_KEY = 'sm_corporation_chalans';
 const CHALAN_COUNTER_KEY = 'sm_corporation_chalan_counter';
 const BILL_COUNTER_KEY = 'sm_corporation_bill_counter';
+const QUOTATION_COUNTER_KEY = 'sm_corporation_quotation_counter';
 
 // Current chalan data
 let currentChalanData = null;
@@ -56,6 +57,12 @@ function initializeChalanNumber() {
         billCounter = 1;
         localStorage.setItem(BILL_COUNTER_KEY, billCounter);
     }
+
+    let quotationCounter = localStorage.getItem(QUOTATION_COUNTER_KEY);
+    if (!quotationCounter) {
+        quotationCounter = 1;
+        localStorage.setItem(QUOTATION_COUNTER_KEY, quotationCounter);
+    }
     
     document.getElementById('chalanNo').value = formatChalanNumber(counter);
 }
@@ -75,6 +82,13 @@ function incrementBillNumber() {
     let counter = parseInt(localStorage.getItem(BILL_COUNTER_KEY) || '1');
     counter++;
     localStorage.setItem(BILL_COUNTER_KEY, counter);
+    return counter;
+}
+
+function incrementQuotationNumber() {
+    let counter = parseInt(localStorage.getItem(QUOTATION_COUNTER_KEY) || '1');
+    counter++;
+    localStorage.setItem(QUOTATION_COUNTER_KEY, counter);
     return counter;
 }
 
@@ -121,6 +135,7 @@ function switchMode(mode) {
     const printBtnText = document.getElementById('printBtnText');
     const newDocBtnText = document.getElementById('newDocBtnText');
     const savedSectionTitle = document.getElementById('savedSectionTitle');
+    const viewSavedBtnText = document.getElementById('viewSavedBtnText');
     
     if (mode === 'bill') {
         formTitle.textContent = 'Bill Generator';
@@ -129,14 +144,33 @@ function switchMode(mode) {
         printBtnText.textContent = 'Print Bill';
         newDocBtnText.textContent = 'New Bill';
         savedSectionTitle.textContent = 'Saved Bills';
+        viewSavedBtnText.textContent = 'View Saved Bills';
         
         // Update document number
         const billCounter = localStorage.getItem(BILL_COUNTER_KEY) || '1';
         document.getElementById('chalanNo').value = formatChalanNumber(billCounter);
         
-        // Show bill columns, hide chalan columns
+        // Show bill columns, hide others
         document.querySelectorAll('.chalan-only').forEach(el => el.style.display = 'none');
         document.querySelectorAll('.bill-only').forEach(el => el.style.display = '');
+        document.querySelectorAll('.quote-only').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('.chalan-bill-only').forEach(el => el.style.display = '');
+    } else if (mode === 'quotation') {
+        formTitle.textContent = 'Quotation Generator';
+        docNoLabel.textContent = 'Quotation No';
+        generateBtnText.textContent = 'Generate Quotation';
+        printBtnText.textContent = 'Print Quotation';
+        newDocBtnText.textContent = 'New Quotation';
+        savedSectionTitle.textContent = 'Saved Quotations';
+        viewSavedBtnText.textContent = 'View Saved Quotations';
+
+        const quotationCounter = localStorage.getItem(QUOTATION_COUNTER_KEY) || '1';
+        document.getElementById('chalanNo').value = formatChalanNumber(quotationCounter);
+
+        document.querySelectorAll('.chalan-only').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('.bill-only').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('.quote-only').forEach(el => el.style.display = '');
+        document.querySelectorAll('.chalan-bill-only').forEach(el => el.style.display = 'none');
     } else {
         formTitle.textContent = 'Chalan Generator';
         docNoLabel.textContent = 'Chalan No';
@@ -144,14 +178,17 @@ function switchMode(mode) {
         printBtnText.textContent = 'Print Chalan';
         newDocBtnText.textContent = 'New Chalan';
         savedSectionTitle.textContent = 'Saved Chalans';
+        viewSavedBtnText.textContent = 'View Saved Chalans';
         
         // Update document number
         const chalanCounter = localStorage.getItem(CHALAN_COUNTER_KEY) || '1';
         document.getElementById('chalanNo').value = formatChalanNumber(chalanCounter);
         
-        // Show chalan columns, hide bill columns
+        // Show chalan columns, hide others
         document.querySelectorAll('.chalan-only').forEach(el => el.style.display = '');
         document.querySelectorAll('.bill-only').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('.quote-only').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('.chalan-bill-only').forEach(el => el.style.display = '');
     }
 }
 
@@ -186,27 +223,22 @@ function calculateRowAmount(row) {
 function addItemRow() {
     const rowCount = itemsTableBody.querySelectorAll('tr').length + 1;
     const newRow = document.createElement('tr');
-    
-    if (currentMode === 'bill') {
-        newRow.innerHTML = `
-            <td class="sl-no">${rowCount}</td>
-            <td><input type="text" class="item-desc" placeholder="Item description"></td>
-            <td><input type="text" class="item-quantity" placeholder="Qty"></td>
-            <td class="bill-only"><input type="number" class="item-rate" placeholder="Rate" step="0.01"></td>
-            <td class="bill-only"><input type="number" class="item-amount" placeholder="Amount" step="0.01" readonly></td>
-            <td><button type="button" class="btn-remove" onclick="removeItem(this)">×</button></td>
-        `;
-    } else {
-        newRow.innerHTML = `
-            <td class="sl-no">${rowCount}</td>
-            <td><input type="text" class="item-desc" placeholder="Item description"></td>
-            <td class="chalan-only"><input type="text" class="item-origin" placeholder="Origin"></td>
-            <td class="chalan-only"><input type="text" class="item-packaging" placeholder="Packaging"></td>
-            <td><input type="text" class="item-quantity" placeholder="Qty"></td>
-            <td><button type="button" class="btn-remove" onclick="removeItem(this)">×</button></td>
-        `;
-    }
-    
+
+    newRow.innerHTML = `
+        <td class="sl-no">${rowCount}</td>
+        <td class="chalan-bill-only"><input type="text" class="item-desc" placeholder="Item description"></td>
+        <td class="chalan-only"><input type="text" class="item-origin" placeholder="Origin"></td>
+        <td class="chalan-only"><input type="text" class="item-packaging" placeholder="Packaging"></td>
+        <td class="chalan-bill-only"><input type="text" class="item-quantity" placeholder="Qty"></td>
+        <td class="quote-only" style="display:none;"><input type="text" class="item-quote-product" placeholder="Product name"></td>
+        <td class="quote-only" style="display:none;"><input type="text" class="item-quote-packing" placeholder="Packing"></td>
+        <td class="quote-only" style="display:none;"><input type="text" class="item-quote-origin" placeholder="Country"></td>
+        <td class="quote-only" style="display:none;"><input type="text" class="item-quote-price" placeholder="Price per kg"></td>
+        <td class="bill-only" style="display:none;"><input type="number" class="item-rate" placeholder="Rate" step="0.01"></td>
+        <td class="bill-only" style="display:none;"><input type="number" class="item-amount" placeholder="Amount" step="0.01" readonly></td>
+        <td><button type="button" class="btn-remove" onclick="removeItem(this)">x</button></td>
+    `;
+
     itemsTableBody.appendChild(newRow);
 }
 
@@ -245,13 +277,13 @@ function collectFormData() {
     const rows = itemsTableBody.querySelectorAll('tr');
 
     rows.forEach((row, index) => {
-        const desc = row.querySelector('.item-desc').value.trim();
-        const quantity = row.querySelector('.item-quantity').value.trim();
+        const desc = row.querySelector('.item-desc')?.value.trim() || '';
+        const quantity = row.querySelector('.item-quantity')?.value.trim() || '';
 
         if (currentMode === 'bill') {
             const rate = row.querySelector('.item-rate')?.value.trim() || '';
             const amount = row.querySelector('.item-amount')?.value.trim() || '';
-            
+
             if (desc || quantity || rate || amount) {
                 items.push({
                     sl: index + 1,
@@ -261,10 +293,25 @@ function collectFormData() {
                     amount: amount
                 });
             }
+        } else if (currentMode === 'quotation') {
+            const productName = row.querySelector('.item-quote-product')?.value.trim() || '';
+            const packing = row.querySelector('.item-quote-packing')?.value.trim() || '';
+            const origin = row.querySelector('.item-quote-origin')?.value.trim() || '';
+            const price = row.querySelector('.item-quote-price')?.value.trim() || '';
+
+            if (productName || packing || origin || price) {
+                items.push({
+                    sl: index + 1,
+                    productName: productName,
+                    packing: packing,
+                    origin: origin,
+                    price: price
+                });
+            }
         } else {
             const origin = row.querySelector('.item-origin')?.value.trim() || '';
             const packaging = row.querySelector('.item-packaging')?.value.trim() || '';
-            
+
             if (desc || origin || packaging || quantity) {
                 items.push({
                     sl: index + 1,
@@ -286,13 +333,25 @@ function collectFormData() {
         customerPhone: document.getElementById('customerPhone').value.trim(),
         customerAddress: document.getElementById('customerAddress').value.trim(),
         quantityUnit: document.getElementById('quantityUnit').value,
+        quoteTo: document.getElementById('quoteTo')?.value.trim() || '',
+        quoteAttentionName: document.getElementById('quoteAttentionName')?.value.trim() || '',
+        quoteAttentionDesignation: document.getElementById('quoteAttentionDesignation')?.value.trim() || '',
+        quoteTerms: document.getElementById('quoteTerms')?.value.trim() || '',
+        quoteValidTill: document.getElementById('quoteValidTill')?.value || '',
+        quoteIncludeVat: document.getElementById('quoteIncludeVat')?.value || 'include',
+        quoteIncludeDelivery: document.getElementById('quoteIncludeDelivery')?.value || 'include',
         items: items,
         createdAt: new Date().toISOString()
     };
 }
 
 function validateFormData(data) {
-    if (!data.customerName) {
+    if (data.mode === 'quotation' && !data.quoteTo) {
+        alert('Please enter recipient name');
+        document.getElementById('quoteTo').focus();
+        return false;
+    }
+    if (data.mode !== 'quotation' && !data.customerName) {
         alert('Please enter customer name');
         document.getElementById('customerName').focus();
         return false;
@@ -310,6 +369,10 @@ function validateFormData(data) {
 }
 
 function renderChalanPreview(data) {
+    if (data.mode === 'quotation') {
+        renderQuotationPreview(data);
+        return;
+    }
     const isBillMode = data.mode === 'bill';
     const formattedDate = formatDate(data.date);
     
@@ -327,9 +390,9 @@ function renderChalanPreview(data) {
         }
     });
 
-    // Generate item rows (minimum 13 rows to fill A4 page)
+    // Generate item rows (minimum 11 rows to keep more footer space)
     let itemRowsHtml = '';
-    const minRows = 13;
+    const minRows = 11;
     const totalRows = Math.max(data.items.length, minRows);
 
     for (let i = 0; i < totalRows; i++) {
@@ -519,6 +582,131 @@ function renderChalanPreview(data) {
     chalanPreview.innerHTML = chalanHtml;
 }
 
+function renderQuotationPreview(data) {
+    const formattedDate = formatDate(data.date);
+    const subject = 'Quotation Letter';
+
+    const attentionParts = [];
+    if (data.quoteAttentionName) {
+        attentionParts.push(data.quoteAttentionName);
+    }
+    if (data.quoteAttentionDesignation) {
+        attentionParts.push(`(${data.quoteAttentionDesignation})`);
+    }
+    const attentionLine = attentionParts.join(' ');
+
+    const termsLines = data.quoteTerms
+        ? data.quoteTerms.split('\n').map(line => line.trim()).filter(Boolean)
+        : [];
+    const validTill = data.quoteValidTill ? formatDate(data.quoteValidTill) : '';
+    const vatLine = data.quoteIncludeVat === 'exclude' ? 'Excluding VAT' : 'Including VAT';
+    const deliveryLine = data.quoteIncludeDelivery === 'exclude'
+        ? 'Excluding Delivery Charge'
+        : 'Including Delivery Charge';
+    const defaultTerms = [
+        validTill ? `The quotation will be valid till ${validTill}` : 'The quotation will be valid till ____',
+        vatLine,
+        deliveryLine
+    ];
+    const finalTerms = termsLines.length ? termsLines : defaultTerms;
+
+    const itemRowsHtml = data.items.map((item) => `
+        <tr>
+            <td>${item.sl}</td>
+            <td>${escapeHtml(item.productName)}</td>
+            <td>${escapeHtml(item.packing)}</td>
+            <td>${escapeHtml(item.origin)}</td>
+            <td>${escapeHtml(item.price)}</td>
+        </tr>
+    `).join('');
+
+    const termsHtml = finalTerms.map((term) => `<li>${escapeHtml(term)}</li>`).join('');
+
+    const quotationHtml = `
+        <div class="quotation-content">
+            <div class="quotation-header">
+                <div class="quotation-logo">
+                    <img src="logo.png" alt="SM Corporation" class="chalan-logo">
+                </div>
+                <div class="quotation-company">
+                    <div class="chalan-company-info">
+                        <h1>SM CORPORATION</h1>
+                        <div class="chalan-contact">
+                            <div class="contact-item phone">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                                <span>01713675689</span>
+                            </div>
+                            <div class="contact-item facebook">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                                <span>smcorporation.official.page</span>
+                            </div>
+                            <div class="contact-item email">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22 6C22 4.9 21.1 4 20 4H4C2.9 4 2 4.9 2 6V18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6ZM20 6L12 11L4 6H20ZM20 18H4V8L12 13L20 8V18Z" fill="currentColor"/></svg>
+                                <span>smcorporation.official@gmail.com</span>
+                            </div>
+                            <div class="contact-item address">
+                                <span>House: 29, Road: 06, Block: G, Aftabnagar, Dhaka-1212</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="quotation-header-spacer" aria-hidden="true"></div>
+            </div>
+
+            <img src="logo.png" alt="Watermark" class="quotation-watermark">
+
+            <div class="quotation-body-area">
+                <div class="quotation-meta">
+                    <div>Date: ${formattedDate}</div>
+                    <div>To: ${escapeHtml(data.quoteTo)}</div>
+                    ${attentionLine ? `<div>Kind Attention: ${escapeHtml(attentionLine)}</div>` : ''}
+                </div>
+
+                <div class="quotation-subject">Subject: ${escapeHtml(subject)}</div>
+
+                <div class="quotation-body">
+                    <div>Dear Sir,</div>
+                    <div>We are pleased to submit you the below mentioned quotation letter as per your request.</div>
+                </div>
+
+                <div class="quotation-table-wrapper">
+                    <table class="quotation-table">
+                        <thead>
+                            <tr>
+                                <th>Sl. No</th>
+                                <th>Product Name</th>
+                                <th>Packing</th>
+                                <th>Country Of Origin</th>
+                                <th>Price Per Kg</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${itemRowsHtml}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="quotation-terms">
+                    <div><strong>Terms &amp; Condition:</strong></div>
+                    <ol>
+                        ${termsHtml}
+                    </ol>
+                </div>
+
+                <div class="quotation-footer">
+                    <div>Would you please inform if you need further assistance of the above quotation.</div>
+                    <div>Thanking you with your kind anticipation</div>
+                    <div>Sincerely Yours,</div>
+                    <div>Waiting for your feedback</div>
+                    <div class="quotation-signature">MD Asaduzzaman<br>CEO &amp; Proprietor</div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    chalanPreview.innerHTML = quotationHtml;
+}
+
 function formatDate(dateStr) {
     if (!dateStr) return '';
     const date = new Date(dateStr);
@@ -533,6 +721,12 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+function addDays(date, days) {
+    const newDate = new Date(date);
+    newDate.setDate(newDate.getDate() + days);
+    return newDate;
 }
 
 // ============================================
@@ -647,25 +841,60 @@ function downloadPdf() {
         return;
     }
 
-    const docType = currentChalanData.mode === 'bill' ? 'Bill' : 'Chalan';
+    const docType = currentChalanData.mode === 'bill'
+        ? 'Bill'
+        : currentChalanData.mode === 'quotation'
+            ? 'Quotation'
+            : 'Chalan';
+    const chalanPreview = document.getElementById('chalan-preview');
+    if (!chalanPreview) {
+        alert('Preview not ready. Please generate the document first.');
+        return;
+    }
 
-    // Use browser's print dialog which allows saving as PDF
-    // This avoids CORS issues with local files
-    alert(`Print Dialog Instructions:\\n\\n1. Select "Save as PDF" or "Microsoft Print to PDF"\\n2. Set Margins to "None" for full page\\n3. Uncheck "Headers and footers"\\n4. Click Save/Print`);
+    const fileSafeNumber = (currentChalanData.chalanNo || docType)
+        .toString()
+        .replace(/[^a-z0-9_-]+/gi, '-')
+        .replace(/^-+|-+$/g, '');
+    const fileName = `${docType}-${fileSafeNumber || 'document'}.pdf`;
 
-    window.print();
+    if (typeof html2pdf === 'undefined') {
+        alert('PDF generator not loaded. Please refresh the page.');
+        return;
+    }
 
-    // Increment number for next document after printing
-    setTimeout(() => {
-        if (currentChalanData.mode === 'bill') {
-            const newCounter = incrementBillNumber();
-            document.getElementById('chalanNo').value = formatChalanNumber(newCounter);
-        } else {
-            const newCounter = incrementChalanNumber();
-            document.getElementById('chalanNo').value = formatChalanNumber(newCounter);
-        }
-    }, 1000);
+    const options = {
+        margin: 0,
+        filename: fileName,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 1.5, useCORS: true, backgroundColor: '#ffffff', scrollX: 0, scrollY: 0 },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['avoid-all'] }
+    };
+
+    document.body.classList.add('pdf-export');
+
+    html2pdf().set(options).from(chalanPreview).save().then(() => {
+        setTimeout(() => {
+            if (currentChalanData.mode === 'bill') {
+                const newCounter = incrementBillNumber();
+                document.getElementById('chalanNo').value = formatChalanNumber(newCounter);
+            } else if (currentChalanData.mode === 'quotation') {
+                const newCounter = incrementQuotationNumber();
+                document.getElementById('chalanNo').value = formatChalanNumber(newCounter);
+            } else {
+                const newCounter = incrementChalanNumber();
+                document.getElementById('chalanNo').value = formatChalanNumber(newCounter);
+            }
+        }, 1000);
+    }).catch(() => {
+        alert('PDF download failed. Please try again.');
+    }).finally(() => {
+        document.body.classList.remove('pdf-export');
+    });
 }
+
+
 
 function renderSavedChalans() {
     const chalans = getSavedChalans();
@@ -688,8 +917,12 @@ function renderSavedChalans() {
     chalans.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     savedChalansList.innerHTML = chalans.map(chalan => {
-        const docType = chalan.mode === 'bill' ? 'Bill' : 'Chalan';
-        const docLabel = chalan.mode === 'bill' ? 'Bill' : 'Chalan';
+        const docType = chalan.mode === 'bill'
+            ? 'Bill'
+            : chalan.mode === 'quotation'
+                ? 'Quotation'
+                : 'Chalan';
+        const docLabel = docType;
         
         return `
             <div class="saved-item">
@@ -718,7 +951,7 @@ function viewSavedChalan(chalanNo) {
 }
 
 function deleteSavedChalan(chalanNo) {
-    if (!confirm('Are you sure you want to delete this chalan?')) {
+    if (!confirm('Are you sure you want to delete this document?')) {
         return;
     }
 
@@ -743,26 +976,39 @@ function startNewChalan() {
     document.getElementById('customerAddress').value = '';
     document.getElementById('poNo').value = '';
 
-    // Reset items table
-    itemsTableBody.innerHTML = `
-        <tr>
-            <td class="sl-no">1</td>
-            <td><input type="text" class="item-desc" placeholder="Item description"></td>
-            <td><input type="text" class="item-origin" placeholder="Origin"></td>
-            <td><input type="text" class="item-packaging" placeholder="Packaging"></td>
-            <td><input type="text" class="item-quantity" placeholder="Qty"></td>
-            <td><button type="button" class="btn-remove" onclick="removeItem(this)">×</button></td>
-        </tr>
-    `;
+    const quoteTo = document.getElementById('quoteTo');
+    const quoteAttentionName = document.getElementById('quoteAttentionName');
+    const quoteAttentionDesignation = document.getElementById('quoteAttentionDesignation');
+    const quoteTerms = document.getElementById('quoteTerms');
+    const quoteValidTill = document.getElementById('quoteValidTill');
+    const quoteIncludeVat = document.getElementById('quoteIncludeVat');
+    const quoteIncludeDelivery = document.getElementById('quoteIncludeDelivery');
 
-    // Update chalan number and date
-    const currentCounter = localStorage.getItem(CHALAN_COUNTER_KEY) || '1';
+    if (quoteTo) quoteTo.value = '';
+    if (quoteAttentionName) quoteAttentionName.value = '';
+    if (quoteAttentionDesignation) quoteAttentionDesignation.value = '';
+    if (quoteTerms) quoteTerms.value = '';
+    if (quoteValidTill) quoteValidTill.value = '';
+    if (quoteIncludeVat) quoteIncludeVat.value = 'include';
+    if (quoteIncludeDelivery) quoteIncludeDelivery.value = 'include';
+
+    // Reset items table
+    itemsTableBody.innerHTML = '';
+    addItemRow();
+
+    // Update document number and date
+    const currentCounter = currentMode === 'bill'
+        ? localStorage.getItem(BILL_COUNTER_KEY) || '1'
+        : currentMode === 'quotation'
+            ? localStorage.getItem(QUOTATION_COUNTER_KEY) || '1'
+            : localStorage.getItem(CHALAN_COUNTER_KEY) || '1';
     document.getElementById('chalanNo').value = formatChalanNumber(currentCounter);
     setTodayDate();
 
     currentChalanData = null;
     showInputForm();
 }
+
 
 // Make functions available globally for inline onclick handlers
 window.removeItem = removeItem;

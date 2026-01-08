@@ -23,6 +23,7 @@
                 <div class="mode-toggle">
                     <button type="button" class="mode-btn active" data-mode="chalan">Chalan</button>
                     <button type="button" class="mode-btn" data-mode="bill">Bill</button>
+                    <button type="button" class="mode-btn" data-mode="quotation">Quotation</button>
                 </div>
             </div>
 
@@ -39,12 +40,12 @@
                     </div>
                     <div class="form-group">
                         <label for="poNo">P/O</label>
-                        <input type="text" id="poNo" placeholder="Purchase Order No.">
+                        <input type="text" id="poNo" class="chalan-bill-only" placeholder="Purchase Order No.">
                     </div>
                 </div>
 
                 <!-- Customer Info -->
-                <div class="form-group-row">
+                <div class="form-group-row chalan-bill-only">
                     <div class="form-group flex-2">
                         <label for="customerName">Name</label>
                         <input type="text" id="customerName" placeholder="Customer Name" required>
@@ -55,9 +56,49 @@
                     </div>
                 </div>
 
-                <div class="form-group">
+                <div class="form-group chalan-bill-only">
                     <label for="customerAddress">Address</label>
                     <input type="text" id="customerAddress" placeholder="Customer Address">
+                </div>
+
+                <!-- Quotation Info -->
+                <div class="form-group-row quote-only" style="display:none;">
+                    <div class="form-group flex-2">
+                        <label for="quoteTo">To</label>
+                        <input type="text" id="quoteTo" placeholder="Company / Recipient Name">
+                    </div>
+                    <div class="form-group">
+                        <label for="quoteAttentionName">Kind Attention</label>
+                        <input type="text" id="quoteAttentionName" placeholder="Name">
+                    </div>
+                    <div class="form-group">
+                        <label for="quoteAttentionDesignation">Designation</label>
+                        <input type="text" id="quoteAttentionDesignation" placeholder="Designation">
+                    </div>
+                </div>
+                <div class="form-group quote-only" style="display:none;">
+                    <label for="quoteTerms">Terms &amp; Conditions (one per line)</label>
+                    <textarea id="quoteTerms" rows="4" placeholder="The quotation will be valid till...&#10;Including VAT&#10;Including Delivery Charge (Mitford)"></textarea>
+                </div>
+                <div class="form-group-row quote-only" style="display:none;">
+                    <div class="form-group">
+                        <label for="quoteValidTill">Valid Till</label>
+                        <input type="date" id="quoteValidTill">
+                    </div>
+                    <div class="form-group">
+                        <label for="quoteIncludeVat">VAT</label>
+                        <select id="quoteIncludeVat">
+                            <option value="include">Include VAT</option>
+                            <option value="exclude">Exclude VAT</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="quoteIncludeDelivery">Delivery Charge</label>
+                        <select id="quoteIncludeDelivery">
+                            <option value="include">Include Delivery Charge</option>
+                            <option value="exclude">Exclude Delivery Charge</option>
+                        </select>
+                    </div>
                 </div>
 
                 <!-- Items Section -->
@@ -74,10 +115,14 @@
                             <thead id="itemsTableHead">
                                 <tr>
                                     <th>Sl.</th>
-                                    <th>Description</th>
+                                    <th class="chalan-bill-only">Description</th>
                                     <th class="chalan-only">Origin</th>
                                     <th class="chalan-only">Packaging</th>
-                                    <th>Quantity</th>
+                                    <th class="chalan-bill-only">Quantity</th>
+                                    <th class="quote-only" style="display:none;">Product Name</th>
+                                    <th class="quote-only" style="display:none;">Packing</th>
+                                    <th class="quote-only" style="display:none;">Country Of Origin</th>
+                                    <th class="quote-only" style="display:none;">Price Per Kg</th>
                                     <th class="bill-only" style="display:none;">Rate/Kg</th>
                                     <th class="bill-only" style="display:none;">Amount</th>
                                     <th></th>
@@ -86,20 +131,24 @@
                             <tbody id="itemsTableBody">
                                 <tr>
                                     <td class="sl-no">1</td>
-                                    <td><input type="text" class="item-desc" placeholder="Item description"></td>
+                                    <td class="chalan-bill-only"><input type="text" class="item-desc" placeholder="Item description"></td>
                                     <td class="chalan-only"><input type="text" class="item-origin" placeholder="Origin"></td>
                                     <td class="chalan-only"><input type="text" class="item-packaging" placeholder="Packaging"></td>
-                                    <td><input type="text" class="item-quantity" placeholder="Qty"></td>
+                                    <td class="chalan-bill-only"><input type="text" class="item-quantity" placeholder="Qty"></td>
+                                    <td class="quote-only" style="display:none;"><input type="text" class="item-quote-product" placeholder="Product name"></td>
+                                    <td class="quote-only" style="display:none;"><input type="text" class="item-quote-packing" placeholder="Packing"></td>
+                                    <td class="quote-only" style="display:none;"><input type="text" class="item-quote-origin" placeholder="Country"></td>
+                                    <td class="quote-only" style="display:none;"><input type="text" class="item-quote-price" placeholder="Price per kg"></td>
                                     <td class="bill-only" style="display:none;"><input type="number" class="item-rate" placeholder="Rate" step="0.01"></td>
                                     <td class="bill-only" style="display:none;"><input type="number" class="item-amount" placeholder="Amount" step="0.01" readonly></td>
-                                    <td><button type="button" class="btn-remove" onclick="removeItem(this)">×</button>
+                                    <td><button type="button" class="btn-remove" onclick="removeItem(this)">x</button>
                                     </td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
 
-                    <div class="unit-selector">
+                    <div class="unit-selector chalan-bill-only">
                         <label for="quantityUnit">Quantity Unit:</label>
                         <select id="quantityUnit">
                             <option value="kg">kg (Kilogram)</option>
@@ -127,7 +176,7 @@
                             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z">
                             </path>
                         </svg>
-                        View Saved Chalans
+                        <span id="viewSavedBtnText">View Saved Chalans</span>
                     </button>
                 </div>
             </form>

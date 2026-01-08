@@ -561,6 +561,27 @@ body {
     font-family: 'Inter', Arial, sans-serif;
 }
 
+
+.pdf-export .chalan-paper {
+    box-sizing: border-box;
+    width: 210mm;
+    height: 297mm;
+    min-height: 297mm;
+    padding: 15mm;
+    box-shadow: none;
+    margin: 0;
+}
+
+.pdf-export .chalan-content {
+    height: 100%;
+    box-sizing: border-box;
+}
+
+.pdf-export .quotation-content {
+    height: 100%;
+    box-sizing: border-box;
+}
+
 .chalan-watermark {
     position: absolute;
     top: 50%;
@@ -576,7 +597,123 @@ body {
     position: relative;
     z-index: 1;
     border: 3px solid #000;
-    padding: 15px;
+    padding: 15px 15px 25px;
+}
+
+/* Quotation Layout */
+.quotation-content {
+    position: relative;
+    z-index: 1;
+    border: 2px solid #000;
+    padding: 12px 12px 40mm;
+    font-size: 14px;
+    min-height: calc(297mm - 30mm);
+    box-sizing: border-box;
+    --quotation-watermark-offset: 60px;
+}
+
+.quotation-header {
+    display: grid;
+    grid-template-columns: 120px 1fr 120px;
+    gap: 12px;
+    align-items: flex-start;
+    border: 2px solid #000;
+    padding: 10px;
+    margin-bottom: 10px;
+}
+
+.quotation-logo {
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    width: 120px;
+    height: 120px;
+    align-items: center;
+    justify-content: center;
+}
+
+.quotation-logo .chalan-logo {
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 100%;
+}
+
+.quotation-company {
+    text-align: center;
+}
+
+.quotation-header-spacer {
+    width: 100%;
+}
+
+.quotation-meta {
+    margin: 6px 0 12px;
+    line-height: 1.4;
+}
+
+.quotation-subject {
+    margin: 8px 0 10px;
+    font-weight: 600;
+}
+
+.quotation-body {
+    margin-bottom: 10px;
+}
+
+.quotation-table-wrapper {
+    margin: 10px 0 12px;
+}
+
+.quotation-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    position: relative;
+    z-index: 1;
+}
+
+.quotation-table th,
+.quotation-table td {
+    border: 1px solid #000;
+    padding: 6px 8px;
+    text-align: left;
+}
+
+.quotation-table th {
+    background: #87CEEB;
+    font-weight: 600;
+    text-align: center;
+}
+
+.quotation-terms {
+    margin: 8px 0 12px;
+}
+
+.quotation-terms ol {
+    margin: 6px 0 0 18px;
+    padding: 0;
+}
+
+.quotation-footer {
+    margin-top: 10px;
+    line-height: 1.4;
+}
+
+.quotation-signature {
+    margin-top: 14px;
+    font-weight: 600;
+}
+
+.quotation-watermark {
+    position: absolute;
+    top: calc(50% + var(--quotation-watermark-offset));
+    left: 50%;
+    transform: translate(-50%, -50%);
+    opacity: 0.08;
+    width: 450px;
+    pointer-events: none;
+    z-index: 0;
 }
 
 /* Chalan Header */
@@ -598,7 +735,8 @@ body {
 
 .chalan-logo {
     width: 120px;
-    height: 120px;
+    height: auto;
+    max-height: 120px;
     object-fit: contain;
 }
 
@@ -715,7 +853,7 @@ body {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 800px;
+    width: 400px;
     opacity: 0.12;
     pointer-events: none;
     z-index: 0;
@@ -805,13 +943,13 @@ body {
 
 .chalan-signatory {
     text-align: right;
-    padding-top: 10px;
+    padding-top: 0;
     font-weight: 600;
     font-size: 16px;
     border-top: 1px solid #000;
     width: 200px;
     margin-left: auto;
-    margin-top: 10px;
+    margin-top: 45px;
 }
 
 /* ============================================
@@ -895,7 +1033,8 @@ body {
 
     .chalan-logo {
         width: 140px !important;
-        height: 140px !important;
+        height: auto !important;
+        max-height: 140px !important;
     }
 
     .chalan-company-info h1 {
@@ -935,6 +1074,7 @@ body {
         opacity: 0.08 !important;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
+        width: 1600px !important;
     }
 
     .chalan-badge,
@@ -1040,7 +1180,8 @@ body {
 
     .chalan-logo {
         width: 80px;
-        height: 80px;
+        height: auto;
+        max-height: 80px;
     }
 
     .chalan-company-info h1 {
@@ -1079,7 +1220,7 @@ body {
     }
 
     .table-watermark {
-        width: 180px;
+        width: 90px;
     }
 
     .chalan-taka-row label,
@@ -1178,7 +1319,8 @@ body {
 
     .chalan-logo {
         width: 60px;
-        height: 60px;
+        height: auto;
+        max-height: 60px;
     }
 
     .chalan-company-info h1 {
@@ -1213,7 +1355,7 @@ body {
     }
 
     .table-watermark {
-        width: 120px;
+        width: 60px;
     }
 
     .chalan-taka-row {
