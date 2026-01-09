@@ -1403,3 +1403,71 @@ body {
         display: none;
     }
 }
+
+/* ============================================
+   PDF Export Overrides (force desktop layout)
+   ============================================ */
+
+.pdf-export .chalan-paper {
+    width: 210mm !important;
+    min-height: 297mm !important;
+    padding: 15mm !important;
+    font-size: inherit !important;
+}
+
+.pdf-export .chalan-header {
+    flex-direction: row !important;
+    align-items: flex-start !important;
+    text-align: left !important;
+}
+
+.pdf-export .chalan-logo-section {
+    flex-direction: row !important;
+    align-items: center !important;
+}
+
+.pdf-export .chalan-logo {
+    width: 120px !important;
+    max-height: 120px !important;
+}
+
+.pdf-export .chalan-company-info h1 {
+    font-size: 36px !important;
+}
+
+.pdf-export .chalan-contact .contact-item {
+    font-size: 17px !important;
+}
+
+.pdf-export .chalan-info-row {
+    flex-direction: row !important;
+}
+
+.pdf-export .chalan-info-cell label,
+.pdf-export .chalan-info-cell span {
+    font-size: 14px !important;
+}
+
+.pdf-export .chalan-items-table th {
+    font-size: 16px !important;
+    padding: 14px 12px !important;
+}
+
+.pdf-export .chalan-items-table td {
+    font-size: 15px !important;
+    padding: 12px !important;
+}
+
+.pdf-export .table-watermark {
+    width: 400px !important;
+}
+
+.pdf-export .quotation-header {
+    grid-template-columns: 120px 1fr 120px !important;
+}
+
+.pdf-export .quotation-table th,
+.pdf-export .quotation-table td {
+    font-size: 13px !important;
+    padding: 6px 8px !important;
+}
