@@ -150,11 +150,7 @@ function switchMode(mode) {
         const billCounter = localStorage.getItem(BILL_COUNTER_KEY) || '1';
         document.getElementById('chalanNo').value = formatChalanNumber(billCounter);
         
-        // Show bill columns, hide others
-        document.querySelectorAll('.chalan-only').forEach(el => el.style.display = 'none');
-        document.querySelectorAll('.bill-only').forEach(el => el.style.display = '');
-        document.querySelectorAll('.quote-only').forEach(el => el.style.display = 'none');
-        document.querySelectorAll('.chalan-bill-only').forEach(el => el.style.display = '');
+        applyModeVisibility();
     } else if (mode === 'quotation') {
         formTitle.textContent = 'Quotation Generator';
         docNoLabel.textContent = 'Quotation No';
@@ -167,10 +163,7 @@ function switchMode(mode) {
         const quotationCounter = localStorage.getItem(QUOTATION_COUNTER_KEY) || '1';
         document.getElementById('chalanNo').value = formatChalanNumber(quotationCounter);
 
-        document.querySelectorAll('.chalan-only').forEach(el => el.style.display = 'none');
-        document.querySelectorAll('.bill-only').forEach(el => el.style.display = 'none');
-        document.querySelectorAll('.quote-only').forEach(el => el.style.display = '');
-        document.querySelectorAll('.chalan-bill-only').forEach(el => el.style.display = 'none');
+        applyModeVisibility();
     } else {
         formTitle.textContent = 'Chalan Generator';
         docNoLabel.textContent = 'Chalan No';
@@ -184,12 +177,19 @@ function switchMode(mode) {
         const chalanCounter = localStorage.getItem(CHALAN_COUNTER_KEY) || '1';
         document.getElementById('chalanNo').value = formatChalanNumber(chalanCounter);
         
-        // Show chalan columns, hide others
-        document.querySelectorAll('.chalan-only').forEach(el => el.style.display = '');
-        document.querySelectorAll('.bill-only').forEach(el => el.style.display = 'none');
-        document.querySelectorAll('.quote-only').forEach(el => el.style.display = 'none');
-        document.querySelectorAll('.chalan-bill-only').forEach(el => el.style.display = '');
+        applyModeVisibility();
     }
+}
+
+function applyModeVisibility() {
+    const showChalan = currentMode === 'chalan';
+    const showBill = currentMode === 'bill';
+    const showQuotation = currentMode === 'quotation';
+
+    document.querySelectorAll('.chalan-only').forEach(el => el.style.display = showChalan ? '' : 'none');
+    document.querySelectorAll('.bill-only').forEach(el => el.style.display = showBill ? '' : 'none');
+    document.querySelectorAll('.quote-only').forEach(el => el.style.display = showQuotation ? '' : 'none');
+    document.querySelectorAll('.chalan-bill-only').forEach(el => el.style.display = (showChalan || showBill) ? '' : 'none');
 }
 
 function attachItemCalculation() {
@@ -240,6 +240,7 @@ function addItemRow() {
     `;
 
     itemsTableBody.appendChild(newRow);
+    applyModeVisibility();
 }
 
 function removeItem(button) {
@@ -603,12 +604,20 @@ function renderQuotationPreview(data) {
     const deliveryLine = data.quoteIncludeDelivery === 'exclude'
         ? 'Excluding Delivery Charge'
         : 'Including Delivery Charge';
-    const defaultTerms = [
+    const autoTerms = [
         validTill ? `The quotation will be valid till ${validTill}` : 'The quotation will be valid till ____',
         vatLine,
         deliveryLine
     ];
-    const finalTerms = termsLines.length ? termsLines : defaultTerms;
+    const finalTerms = termsLines.slice();
+    const normalized = new Set(finalTerms.map(term => term.toLowerCase()));
+    autoTerms.forEach((term) => {
+        const key = term.toLowerCase();
+        if (!normalized.has(key)) {
+            normalized.add(key);
+            finalTerms.push(term);
+        }
+    });
 
     const itemRowsHtml = data.items.map((item) => `
         <tr>
