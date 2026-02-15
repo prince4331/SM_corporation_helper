@@ -30,6 +30,11 @@ This workflow:
 - Can be manually triggered from Actions tab
 - Uses official GitHub Pages deployment actions
 
+**Important Files:**
+- `.nojekyll` - Disables Jekyll processing (required for pure static sites)
+  - Without this file, GitHub Pages may not serve all files correctly
+  - This prevents Jekyll from ignoring files starting with underscores or applying Jekyll transformations
+
 ### 3. Trigger Deployment
 
 #### Option A: Automatic Deployment (Recommended)
@@ -66,6 +71,22 @@ To check deployment status:
 4. Look for any errors in the deployment steps
 
 ## Troubleshooting
+
+### Issue: 404 Error - File not found
+
+**Common Causes:**
+1. **Missing `.nojekyll` file** - Jekyll processing interfering with static files
+2. **Incorrect URL** - Make sure you're accessing the correct repository URL
+3. **GitHub Pages not enabled** - Check Settings → Pages
+
+**Solution:**
+1. Ensure `.nojekyll` file exists in the repository root (this PR adds it)
+2. Access the site at the correct URL: `https://prince4331.github.io/SM_corporation_helper/`
+   - Note: Repository name is case-sensitive in the URL
+   - The actual repository name is `SM_corporation_helper` (with capitals and underscore)
+3. Verify GitHub Pages is enabled in Settings → Pages with Source set to "GitHub Actions"
+4. Wait 1-2 minutes after workflow completes for deployment to propagate
+5. Clear browser cache and try again
 
 ### Issue: GitHub Pages not showing the site
 
