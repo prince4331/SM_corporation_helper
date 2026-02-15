@@ -36,7 +36,7 @@ This workflow:
 Simply merge this PR to the `main` branch. The workflow will automatically:
 1. Run on push to `main`
 2. Build and deploy the site to GitHub Pages
-3. The site will be available at: `https://prince4331.github.io/sm-corporation-helper/`
+3. The site will be available at: `https://prince4331.github.io/SM_corporation_helper/`
 
 #### Option B: Manual Deployment
 1. Go to the **Actions** tab in your repository
@@ -49,7 +49,7 @@ Simply merge this PR to the `main` branch. The workflow will automatically:
 
 After deployment completes (usually takes 1-2 minutes):
 1. Go to **Actions** tab to see deployment status
-2. Once successful (green checkmark), visit: `https://prince4331.github.io/sm-corporation-helper/`
+2. Once successful (green checkmark), visit: `https://prince4331.github.io/SM_corporation_helper/`
 3. Test the application functionality:
    - Try generating a Chalan
    - Try generating a Bill

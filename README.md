@@ -14,7 +14,7 @@ A professional web application for generating Chalans, Bills, and Quotations for
 ## Live Demo
 
 The application is deployed on GitHub Pages and can be accessed at:
-**https://prince4331.github.io/sm-corporation-helper/**
+**https://prince4331.github.io/SM_corporation_helper/**
 
 ## Deployment
 
