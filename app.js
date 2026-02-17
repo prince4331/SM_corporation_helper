@@ -10,6 +10,7 @@ const chalanForm = document.getElementById('chalan-form');
 const itemsTableBody = document.getElementById('itemsTableBody');
 const chalanPreview = document.getElementById('chalan-preview');
 const savedChalansList = document.getElementById('savedChalansList');
+const chalanNoInput = document.getElementById('chalanNo');
 
 // Buttons
 const addItemBtn = document.getElementById('addItemBtn');
@@ -32,6 +33,12 @@ let currentChalanData = null;
 // Current mode (chalan or bill)
 let currentMode = 'chalan';
 
+const docNumberState = {
+    chalan: { auto: '', value: '', manual: false },
+    bill: { auto: '', value: '', manual: false },
+    quotation: { auto: '', value: '', manual: false }
+};
+
 // ============================================
 // Initialization
 // ============================================
@@ -42,6 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
     attachEventListeners();
     setupModeToggle();
     attachItemCalculation();
+    attachDocNumberListener();
 });
 
 function initializeChalanNumber() {
@@ -63,12 +71,93 @@ function initializeChalanNumber() {
         quotationCounter = 1;
         localStorage.setItem(QUOTATION_COUNTER_KEY, quotationCounter);
     }
-    
-    document.getElementById('chalanNo').value = formatChalanNumber(counter);
+
+    applyDocumentNumberForMode('chalan');
 }
 
 function formatChalanNumber(num) {
     return String(num).padStart(4, '0');
+}
+
+function getAutoNumberForMode(mode) {
+    const counter = mode === 'bill'
+        ? localStorage.getItem(BILL_COUNTER_KEY) || '1'
+        : mode === 'quotation'
+            ? localStorage.getItem(QUOTATION_COUNTER_KEY) || '1'
+            : localStorage.getItem(CHALAN_COUNTER_KEY) || '1';
+    return formatChalanNumber(counter);
+}
+
+function persistCurrentDocNumber() {
+    const state = docNumberState[currentMode];
+    const value = chalanNoInput.value.trim();
+    state.value = value;
+    state.manual = value !== '' && value !== state.auto;
+}
+
+function syncManualNumberToCounter() {
+    const state = docNumberState[currentMode];
+    const value = chalanNoInput.value.trim();
+
+    if (!value) {
+        state.manual = false;
+        state.value = '';
+        applyDocumentNumberForMode(currentMode);
+        return;
+    }
+
+    if (!state.manual) {
+        return;
+    }
+
+    if (!/^\d+$/.test(value)) {
+        return;
+    }
+
+    const manualNumber = parseInt(value, 10);
+    const nextNumber = manualNumber + 1;
+
+    if (currentMode === 'bill') {
+        localStorage.setItem(BILL_COUNTER_KEY, String(nextNumber));
+        updateAutoNumberForMode('bill', formatChalanNumber(nextNumber));
+    } else if (currentMode === 'quotation') {
+        localStorage.setItem(QUOTATION_COUNTER_KEY, String(nextNumber));
+        updateAutoNumberForMode('quotation', formatChalanNumber(nextNumber));
+    } else {
+        localStorage.setItem(CHALAN_COUNTER_KEY, String(nextNumber));
+        updateAutoNumberForMode('chalan', formatChalanNumber(nextNumber));
+    }
+}
+
+function applyDocumentNumberForMode(mode) {
+    const state = docNumberState[mode];
+    const autoValue = getAutoNumberForMode(mode);
+    state.auto = autoValue;
+    chalanNoInput.dataset.auto = autoValue;
+
+    const manualValue = (state.value || '').trim();
+    if (state.manual && manualValue) {
+        chalanNoInput.value = manualValue;
+    } else {
+        chalanNoInput.value = autoValue;
+        state.value = autoValue;
+        state.manual = false;
+    }
+}
+
+function updateAutoNumberForMode(mode, autoValue) {
+    const state = docNumberState[mode];
+    state.auto = autoValue;
+
+    if (currentMode !== mode) {
+        return;
+    }
+
+    chalanNoInput.dataset.auto = autoValue;
+    if (!state.manual) {
+        chalanNoInput.value = autoValue;
+        state.value = autoValue;
+    }
 }
 
 function incrementChalanNumber() {
@@ -107,6 +196,18 @@ function attachEventListeners() {
     newChalanBtn.addEventListener('click', startNewChalan);
 }
 
+function attachDocNumberListener() {
+    chalanNoInput.addEventListener('input', () => {
+        persistCurrentDocNumber();
+    });
+    chalanNoInput.addEventListener('blur', () => {
+        syncManualNumberToCounter();
+    });
+    chalanNoInput.addEventListener('change', () => {
+        syncManualNumberToCounter();
+    });
+}
+
 // ============================================
 // Mode Toggle (Chalan / Bill)
 // ============================================
@@ -126,6 +227,7 @@ function setupModeToggle() {
 }
 
 function switchMode(mode) {
+    persistCurrentDocNumber();
     currentMode = mode;
     
     // Update form title
@@ -145,12 +247,9 @@ function switchMode(mode) {
         newDocBtnText.textContent = 'New Bill';
         savedSectionTitle.textContent = 'Saved Bills';
         viewSavedBtnText.textContent = 'View Saved Bills';
-        
-        // Update document number
-        const billCounter = localStorage.getItem(BILL_COUNTER_KEY) || '1';
-        document.getElementById('chalanNo').value = formatChalanNumber(billCounter);
-        
+
         applyModeVisibility();
+        applyDocumentNumberForMode(mode);
     } else if (mode === 'quotation') {
         formTitle.textContent = 'Quotation Generator';
         docNoLabel.textContent = 'Quotation No';
@@ -160,10 +259,8 @@ function switchMode(mode) {
         savedSectionTitle.textContent = 'Saved Quotations';
         viewSavedBtnText.textContent = 'View Saved Quotations';
 
-        const quotationCounter = localStorage.getItem(QUOTATION_COUNTER_KEY) || '1';
-        document.getElementById('chalanNo').value = formatChalanNumber(quotationCounter);
-
         applyModeVisibility();
+        applyDocumentNumberForMode(mode);
     } else {
         formTitle.textContent = 'Chalan Generator';
         docNoLabel.textContent = 'Chalan No';
@@ -172,12 +269,9 @@ function switchMode(mode) {
         newDocBtnText.textContent = 'New Chalan';
         savedSectionTitle.textContent = 'Saved Chalans';
         viewSavedBtnText.textContent = 'View Saved Chalans';
-        
-        // Update document number
-        const chalanCounter = localStorage.getItem(CHALAN_COUNTER_KEY) || '1';
-        document.getElementById('chalanNo').value = formatChalanNumber(chalanCounter);
-        
+
         applyModeVisibility();
+        applyDocumentNumberForMode(mode);
     }
 }
 
@@ -887,13 +981,13 @@ function downloadPdf() {
         setTimeout(() => {
             if (currentChalanData.mode === 'bill') {
                 const newCounter = incrementBillNumber();
-                document.getElementById('chalanNo').value = formatChalanNumber(newCounter);
+                updateAutoNumberForMode('bill', formatChalanNumber(newCounter));
             } else if (currentChalanData.mode === 'quotation') {
                 const newCounter = incrementQuotationNumber();
-                document.getElementById('chalanNo').value = formatChalanNumber(newCounter);
+                updateAutoNumberForMode('quotation', formatChalanNumber(newCounter));
             } else {
                 const newCounter = incrementChalanNumber();
-                document.getElementById('chalanNo').value = formatChalanNumber(newCounter);
+                updateAutoNumberForMode('chalan', formatChalanNumber(newCounter));
             }
         }, 1000);
     }).catch(() => {
@@ -1006,12 +1100,7 @@ function startNewChalan() {
     addItemRow();
 
     // Update document number and date
-    const currentCounter = currentMode === 'bill'
-        ? localStorage.getItem(BILL_COUNTER_KEY) || '1'
-        : currentMode === 'quotation'
-            ? localStorage.getItem(QUOTATION_COUNTER_KEY) || '1'
-            : localStorage.getItem(CHALAN_COUNTER_KEY) || '1';
-    document.getElementById('chalanNo').value = formatChalanNumber(currentCounter);
+    applyDocumentNumberForMode(currentMode);
     setTodayDate();
 
     currentChalanData = null;
