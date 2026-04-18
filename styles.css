@@ -597,7 +597,7 @@ body {
     position: relative;
     z-index: 1;
     border: 3px solid #000;
-    padding: 15px 15px 25px;
+    padding: 15px;
 }
 
 /* Quotation Layout */
@@ -920,13 +920,13 @@ body {
 
 /* Footer Section */
 .chalan-footer {
-    margin-top: 20px;
+    margin-top: 10px;
 }
 
 .chalan-taka-row {
     display: flex;
     border: 1px solid #000;
-    margin-bottom: 20px;
+    margin-bottom: 12px;
 }
 
 .chalan-taka-row label {
@@ -951,7 +951,7 @@ body {
     border-top: 1px solid #000;
     width: 200px;
     margin-left: auto;
-    margin-top: 45px;
+    margin-top: 30px;
 }
 
 /* ============================================

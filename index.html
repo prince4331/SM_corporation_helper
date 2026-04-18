@@ -157,6 +157,31 @@
                     </div>
                 </div>
 
+                <div class="form-group-row bill-only" style="display:none;">
+                    <div class="form-group">
+                        <label for="laborBill">Labor Bill</label>
+                        <input type="number" id="laborBill" placeholder="Labor bill amount" step="0.01" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="transportBill">Transport Bill</label>
+                        <input type="number" id="transportBill" placeholder="Transport bill amount" step="0.01" min="0">
+                    </div>
+                </div>
+
+                <div class="form-group-row bill-only" style="display:none;">
+                    <div class="form-group">
+                        <label for="billVatMode">VAT</label>
+                        <select id="billVatMode">
+                            <option value="exclude">Exclude VAT</option>
+                            <option value="include">Include VAT</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="billVatAmountGroup" style="display:none;">
+                        <label for="billVatAmount">VAT Amount</label>
+                        <input type="number" id="billVatAmount" placeholder="VAT amount" step="0.01" min="0">
+                    </div>
+                </div>
+
                 <!-- Actions -->
                 <div class="form-actions">
                     <button type="button" id="generateBtn" class="btn-primary">

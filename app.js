@@ -50,6 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupModeToggle();
     attachItemCalculation();
     attachDocNumberListener();
+    attachBillVatToggle();
 });
 
 function initializeChalanNumber() {
@@ -206,6 +207,27 @@ function attachDocNumberListener() {
     chalanNoInput.addEventListener('change', () => {
         syncManualNumberToCounter();
     });
+}
+
+function attachBillVatToggle() {
+    const vatModeSelect = document.getElementById('billVatMode');
+    const vatAmountGroup = document.getElementById('billVatAmountGroup');
+    const vatAmountInput = document.getElementById('billVatAmount');
+
+    if (!vatModeSelect || !vatAmountGroup || !vatAmountInput) {
+        return;
+    }
+
+    const applyVatVisibility = () => {
+        const includeVat = vatModeSelect.value === 'include';
+        vatAmountGroup.style.display = includeVat ? '' : 'none';
+        if (!includeVat) {
+            vatAmountInput.value = '';
+        }
+    };
+
+    vatModeSelect.addEventListener('change', applyVatVisibility);
+    applyVatVisibility();
 }
 
 // ============================================
@@ -435,6 +457,10 @@ function collectFormData() {
         quoteValidTill: document.getElementById('quoteValidTill')?.value || '',
         quoteIncludeVat: document.getElementById('quoteIncludeVat')?.value || 'include',
         quoteIncludeDelivery: document.getElementById('quoteIncludeDelivery')?.value || 'include',
+        laborBill: document.getElementById('laborBill')?.value.trim() || '',
+        transportBill: document.getElementById('transportBill')?.value.trim() || '',
+        billVatMode: document.getElementById('billVatMode')?.value || 'exclude',
+        billVatAmount: document.getElementById('billVatAmount')?.value.trim() || '',
         items: items,
         createdAt: new Date().toISOString()
     };
@@ -474,6 +500,9 @@ function renderChalanPreview(data) {
     // Calculate totals
     let totalQuantity = 0;
     let totalAmount = 0;
+    const laborBillAmount = parseFloat(data.laborBill) || 0;
+    const transportBillAmount = parseFloat(data.transportBill) || 0;
+    const vatAmount = data.billVatMode === 'include' ? (parseFloat(data.billVatAmount) || 0) : 0;
     
     data.items.forEach(item => {
         const qty = parseFloat(item.quantity) || 0;
@@ -485,9 +514,11 @@ function renderChalanPreview(data) {
         }
     });
 
+    const grandTotalAmount = totalAmount + laborBillAmount + transportBillAmount + vatAmount;
+
     // Generate item rows (minimum 11 rows to keep more footer space)
     let itemRowsHtml = '';
-    const minRows = 11;
+    const minRows = isBillMode ? 7 : 11;
     const totalRows = Math.max(data.items.length, minRows);
 
     for (let i = 0; i < totalRows; i++) {
@@ -558,8 +589,24 @@ function renderChalanPreview(data) {
     // Total row based on mode
     const totalRow = isBillMode ? `
         <tr class="chalan-total-row">
+            <td colspan="4" style="text-align: right; padding-right: 20px;">Item Subtotal</td>
+            <td class="col-amount">${Math.round(totalAmount)} /=</td>
+        </tr>
+        <tr class="chalan-total-row">
+            <td colspan="4" style="text-align: right; padding-right: 20px;">Labor Bill</td>
+            <td class="col-amount">${laborBillAmount ? Math.round(laborBillAmount) + ' /=' : '0 /='}</td>
+        </tr>
+        <tr class="chalan-total-row">
+            <td colspan="4" style="text-align: right; padding-right: 20px;">Transport Bill</td>
+            <td class="col-amount">${transportBillAmount ? Math.round(transportBillAmount) + ' /=' : '0 /='}</td>
+        </tr>
+        <tr class="chalan-total-row">
+            <td colspan="4" style="text-align: right; padding-right: 20px;">VAT</td>
+            <td class="col-amount">${vatAmount ? Math.round(vatAmount) + ' /=' : '0 /='}</td>
+        </tr>
+        <tr class="chalan-total-row">
             <td colspan="4" style="text-align: right; padding-right: 20px;">Total</td>
-            <td class="col-amount">${totalAmount ? Math.round(totalAmount) + ' /=' : ''}</td>
+            <td class="col-amount">${Math.round(grandTotalAmount)} /=</td>
         </tr>
     ` : `
         <tr class="chalan-total-row">
@@ -575,7 +622,7 @@ function renderChalanPreview(data) {
     // Taka in words label
     const takaLabel = isBillMode ? 'Taka(In Word)' : 'Quantity(In Word)';
     const takaValue = isBillMode ? 
-        (totalAmount ? numberToWords(Math.floor(totalAmount)) + ' Taka Only' : '') :
+        (grandTotalAmount ? numberToWords(Math.floor(grandTotalAmount)) + ' Taka Only' : '') :
         (totalQuantity ? numberToWords(totalQuantity) + ' ' + (data.quantityUnit || 'kg') : '');
 
     const chalanHtml = `
@@ -1078,6 +1125,16 @@ function startNewChalan() {
     document.getElementById('customerPhone').value = '';
     document.getElementById('customerAddress').value = '';
     document.getElementById('poNo').value = '';
+    const laborBill = document.getElementById('laborBill');
+    const transportBill = document.getElementById('transportBill');
+    const billVatMode = document.getElementById('billVatMode');
+    const billVatAmount = document.getElementById('billVatAmount');
+    const billVatAmountGroup = document.getElementById('billVatAmountGroup');
+    if (laborBill) laborBill.value = '';
+    if (transportBill) transportBill.value = '';
+    if (billVatMode) billVatMode.value = 'exclude';
+    if (billVatAmount) billVatAmount.value = '';
+    if (billVatAmountGroup) billVatAmountGroup.style.display = 'none';
 
     const quoteTo = document.getElementById('quoteTo');
     const quoteAttentionName = document.getElementById('quoteAttentionName');
