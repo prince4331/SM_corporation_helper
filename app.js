@@ -496,6 +496,11 @@ function renderChalanPreview(data) {
     }
     const isBillMode = data.mode === 'bill';
     const formattedDate = formatDate(data.date);
+
+    if (isBillMode) {
+        renderPaginatedBillPreview(data, formattedDate);
+        return;
+    }
     
     // Calculate totals
     let totalQuantity = 0;
@@ -647,7 +652,7 @@ function renderChalanPreview(data) {
                                 <span>smcorporation.official@gmail.com</span>
                             </div>
                             <div class="contact-item address">
-                                <span>House: 29, Road: 06, Block: G, Aftabnagar, Dhaka-1212</span>
+                                <span>Salam Mansion, Mitford Road, Mitford, Dhaka-1100</span>
                             </div>
                         </div>
                     </div>
@@ -722,9 +727,218 @@ function renderChalanPreview(data) {
     `;
 
     chalanPreview.innerHTML = chalanHtml;
+    chalanPreview.classList.remove('multi-page-preview');
+}
+
+function renderPaginatedBillPreview(data, formattedDate) {
+    const rowsPerPage = 15;
+    const rowsOnLastPage = 7;
+    const quantityUnit = data.quantityUnit || 'kg';
+    const items = data.items || [];
+
+    let totalAmount = 0;
+    items.forEach((item) => {
+        totalAmount += parseFloat(item.amount) || 0;
+    });
+
+    const laborBillAmount = parseFloat(data.laborBill) || 0;
+    const transportBillAmount = parseFloat(data.transportBill) || 0;
+    const vatAmount = data.billVatMode === 'include' ? (parseFloat(data.billVatAmount) || 0) : 0;
+    const grandTotalAmount = totalAmount + laborBillAmount + transportBillAmount + vatAmount;
+
+    const chunks = [];
+
+    // Fill regular pages first; then keep a smaller final page for totals/signature.
+    for (let i = 0; i < items.length; i += rowsPerPage) {
+        chunks.push(items.slice(i, i + rowsPerPage));
+    }
+
+    while (chunks.length > 0 && chunks[chunks.length - 1].length > rowsOnLastPage) {
+        const lastChunk = chunks[chunks.length - 1];
+        const splitIndex = lastChunk.length - rowsOnLastPage;
+        const carryChunk = lastChunk.slice(splitIndex);
+        chunks[chunks.length - 1] = lastChunk.slice(0, splitIndex);
+        chunks.push(carryChunk);
+    }
+
+    if (chunks.length > 1 && chunks[chunks.length - 2].length === 0) {
+        chunks.splice(chunks.length - 2, 1);
+    }
+
+    if (chunks.length === 0) {
+        chunks.push([]);
+    }
+
+    const tableHeaders = `
+        <th class="col-sl">Sl No</th>
+        <th class="col-desc">Description</th>
+        <th class="col-quantity">Quantity</th>
+        <th class="col-rate">Rate/Kg</th>
+        <th class="col-amount">Amount</th>
+    `;
+
+    const totalRowsHtml = `
+        <tr class="chalan-total-row">
+            <td colspan="4" style="text-align: right; padding-right: 20px;">Item Subtotal</td>
+            <td class="col-amount">${Math.round(totalAmount)} /=</td>
+        </tr>
+        <tr class="chalan-total-row">
+            <td colspan="4" style="text-align: right; padding-right: 20px;">Labor Bill</td>
+            <td class="col-amount">${laborBillAmount ? Math.round(laborBillAmount) + ' /=' : '0 /='}</td>
+        </tr>
+        <tr class="chalan-total-row">
+            <td colspan="4" style="text-align: right; padding-right: 20px;">Transport Bill</td>
+            <td class="col-amount">${transportBillAmount ? Math.round(transportBillAmount) + ' /=' : '0 /='}</td>
+        </tr>
+        <tr class="chalan-total-row">
+            <td colspan="4" style="text-align: right; padding-right: 20px;">VAT</td>
+            <td class="col-amount">${vatAmount ? Math.round(vatAmount) + ' /=' : '0 /='}</td>
+        </tr>
+        <tr class="chalan-total-row">
+            <td colspan="4" style="text-align: right; padding-right: 20px;">Total</td>
+            <td class="col-amount">${Math.round(grandTotalAmount)} /=</td>
+        </tr>
+    `;
+
+    const takaValue = grandTotalAmount ? numberToWords(Math.floor(grandTotalAmount)) + ' Taka Only' : '';
+
+    const pagesHtml = chunks.map((pageItems, pageIndex) => {
+        const isLastPage = pageIndex === chunks.length - 1;
+
+        let itemRowsHtml = pageItems.map((item) => `
+            <tr>
+                <td class="col-sl">${item.sl}</td>
+                <td class="col-desc">${escapeHtml(item.description)}</td>
+                <td class="col-quantity">${escapeHtml(item.quantity)} ${quantityUnit}</td>
+                <td class="col-rate">${escapeHtml(item.rate)}</td>
+                <td class="col-amount">${Math.round(parseFloat(item.amount) || 0)} /=</td>
+            </tr>
+        `).join('');
+
+        if (isLastPage && pageItems.length < rowsOnLastPage) {
+            for (let i = 0; i < rowsOnLastPage - pageItems.length; i++) {
+                itemRowsHtml += `
+                    <tr>
+                        <td class="col-sl"></td>
+                        <td class="col-desc"></td>
+                        <td class="col-quantity"></td>
+                        <td class="col-rate"></td>
+                        <td class="col-amount"></td>
+                    </tr>
+                `;
+            }
+        }
+
+        const footerHtml = isLastPage ? `
+            <div class="chalan-footer">
+                <div class="chalan-taka-row">
+                    <label>Taka(In Word)</label>
+                    <span>${takaValue}</span>
+                </div>
+
+                <div class="chalan-signatory">
+                    Authorized Signatory
+                </div>
+            </div>
+        ` : '';
+
+        const pageNoHtml = chunks.length > 1
+            ? `<span class="bill-page-no">Page ${pageIndex + 1} of ${chunks.length}</span>`
+            : '';
+
+        const sheetClass = isLastPage ? 'bill-sheet' : 'bill-sheet bill-sheet-break';
+
+        return `
+            <div class="${sheetClass}">
+            <div class="chalan-content bill-page">
+                <div class="chalan-header">
+                    <div class="chalan-logo-section">
+                        <img src="logo.png" alt="SM Corporation" class="chalan-logo">
+                        <div class="chalan-company-info">
+                            <h1>SM CORPORATION</h1>
+                            <div class="chalan-contact">
+                                <div class="contact-item phone">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                                    <span>01713675689</span>
+                                </div>
+                                <div class="contact-item facebook">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                                    <span>smcorporation.official.page</span>
+                                </div>
+                                <div class="contact-item email">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22 6C22 4.9 21.1 4 20 4H4C2.9 4 2 4.9 2 6V18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6ZM20 6L12 11L4 6H20ZM20 18H4V8L12 13L20 8V18Z" fill="currentColor"/></svg>
+                                    <span>smcorporation.official@gmail.com</span>
+                                </div>
+                                <div class="contact-item address">
+                                    <span>Salam Mansion, Mitford Road, Mitford, Dhaka-1100</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chalan-badge">Bill</div>
+                </div>
+
+                <div class="chalan-info-row">
+                    <div class="chalan-info-cell" style="flex: 1;">
+                        <label>Bill No</label>
+                        <span>${escapeHtml(data.chalanNo)}</span>
+                    </div>
+                    <div class="chalan-info-cell" style="flex: 1;">
+                        <label>Date</label>
+                        <span>${formattedDate}</span>
+                    </div>
+                    <div class="chalan-info-cell" style="flex: 1;">
+                        <label>P/O</label>
+                        <span>${escapeHtml(data.poNo)}</span>
+                    </div>
+                </div>
+
+                <div class="chalan-info-row">
+                    <div class="chalan-info-cell" style="flex: 2;">
+                        <label>Name</label>
+                        <span>${escapeHtml(data.customerName)}</span>
+                    </div>
+                    <div class="chalan-info-cell" style="flex: 1;">
+                        <label>Phone</label>
+                        <span>${escapeHtml(data.customerPhone)}</span>
+                    </div>
+                </div>
+
+                <div class="chalan-info-row" style="margin-bottom: 15px;">
+                    <div class="chalan-info-cell" style="flex: 1;">
+                        <label>Address</label>
+                        <span>${escapeHtml(data.customerAddress)}</span>
+                    </div>
+                </div>
+
+                <div class="items-table-wrapper">
+                    <img src="logo.png" alt="Watermark" class="table-watermark">
+                    <table class="chalan-items-table">
+                        <thead>
+                            <tr>
+                                ${tableHeaders}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${itemRowsHtml}
+                            ${isLastPage ? totalRowsHtml : ''}
+                        </tbody>
+                    </table>
+                </div>
+
+                ${footerHtml}
+                ${pageNoHtml}
+            </div>
+            </div>
+        `;
+    }).join('');
+
+    chalanPreview.classList.add('multi-page-preview');
+    chalanPreview.innerHTML = pagesHtml;
 }
 
 function renderQuotationPreview(data) {
+    chalanPreview.classList.remove('multi-page-preview');
     const formattedDate = formatDate(data.date);
     const subject = 'Quotation Letter';
 
@@ -795,7 +1009,7 @@ function renderQuotationPreview(data) {
                                 <span>smcorporation.official@gmail.com</span>
                             </div>
                             <div class="contact-item address">
-                                <span>House: 29, Road: 06, Block: G, Aftabnagar, Dhaka-1212</span>
+                                <span>Salam Mansion, Mitford Road, Mitford, Dhaka-1100</span>
                             </div>
                         </div>
                     </div>
@@ -1017,9 +1231,15 @@ function downloadPdf() {
         margin: 0,
         filename: fileName,
         image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 1.5, useCORS: true, backgroundColor: '#ffffff', scrollX: 0, scrollY: 0 },
+        html2canvas: {
+            scale: 1,
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            scrollX: 0,
+            scrollY: 0
+        },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['avoid-all'] }
+        pagebreak: { mode: ['css', 'legacy'] }
     };
 
     document.body.classList.add('pdf-export');
