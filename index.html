@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="logo-data.js"></script>
 </head>
 
 <body>
@@ -32,7 +33,7 @@
                 <div class="form-group-row">
                     <div class="form-group">
                         <label for="chalanNo" id="docNoLabel">Chalan No</label>
-                        <input type="text" id="chalanNo" readonly>
+                        <input type="text" id="chalanNo">
                     </div>
                     <div class="form-group">
                         <label for="date">Date</label>
@@ -99,6 +100,13 @@
                             <option value="exclude">Exclude Delivery Charge</option>
                         </select>
                     </div>
+                    <div class="form-group">
+                        <label for="quoteIncludeAit">AIT</label>
+                        <select id="quoteIncludeAit">
+                            <option value="include">Include AIT</option>
+                            <option value="exclude">Exclude AIT</option>
+                        </select>
+                    </div>
                 </div>
 
                 <!-- Items Section -->
@@ -154,6 +162,45 @@
                             <option value="kg">kg (Kilogram)</option>
                             <option value="liter">liter (Litre)</option>
                         </select>
+                    </div>
+                </div>
+
+                <div class="form-group-row bill-only" style="display:none;">
+                    <div class="form-group">
+                        <label for="laborBill">Labor Bill</label>
+                        <input type="number" id="laborBill" placeholder="Labor bill amount" step="0.01" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="transportBill">Transport Bill</label>
+                        <input type="number" id="transportBill" placeholder="Transport bill amount" step="0.01" min="0">
+                    </div>
+                </div>
+
+                <div class="form-group-row bill-only" style="display:none;">
+                    <div class="form-group">
+                        <label for="billVatMode">VAT</label>
+                        <select id="billVatMode">
+                            <option value="exclude">Exclude VAT</option>
+                            <option value="include">Include VAT</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="billVatAmountGroup" style="display:none;">
+                        <label for="billVatAmount">VAT Amount</label>
+                        <input type="number" id="billVatAmount" placeholder="VAT amount" step="0.01" min="0">
+                    </div>
+                </div>
+
+                <div class="form-group-row bill-only" style="display:none;">
+                    <div class="form-group">
+                        <label for="billAitMode">AIT</label>
+                        <select id="billAitMode">
+                            <option value="exclude">Exclude AIT</option>
+                            <option value="include">Include AIT</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="billAitAmountGroup" style="display:none;">
+                        <label for="billAitAmount">AIT Amount</label>
+                        <input type="number" id="billAitAmount" placeholder="AIT amount" step="0.01" min="0">
                     </div>
                 </div>
 
@@ -224,8 +271,17 @@
                 </button>
             </div>
 
-            <div id="chalan-preview" class="chalan-paper">
-                <!-- Chalan content will be generated here -->
+            <!-- Screen preview scaling wrapper: the fixed A4 document
+                 (#chalan-preview) keeps its true 210mm width; on narrow
+                 screens it is visually scaled down via transform so the whole
+                 page stays visible. The transform lives on .preview-scale
+                 only, so it is never part of the .pdf-export clone or print. -->
+            <div class="preview-viewport">
+                <div class="preview-scale">
+                    <div id="chalan-preview" class="chalan-paper">
+                        <!-- Chalan content will be generated here -->
+                    </div>
+                </div>
             </div>
         </section>
     </div>

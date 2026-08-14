@@ -10,6 +10,7 @@ const chalanForm = document.getElementById('chalan-form');
 const itemsTableBody = document.getElementById('itemsTableBody');
 const chalanPreview = document.getElementById('chalan-preview');
 const savedChalansList = document.getElementById('savedChalansList');
+const chalanNoInput = document.getElementById('chalanNo');
 
 // Buttons
 const addItemBtn = document.getElementById('addItemBtn');
@@ -32,6 +33,12 @@ let currentChalanData = null;
 // Current mode (chalan or bill)
 let currentMode = 'chalan';
 
+const docNumberState = {
+    chalan: { auto: '', value: '', manual: false },
+    bill: { auto: '', value: '', manual: false },
+    quotation: { auto: '', value: '', manual: false }
+};
+
 // ============================================
 // Initialization
 // ============================================
@@ -42,6 +49,10 @@ document.addEventListener('DOMContentLoaded', () => {
     attachEventListeners();
     setupModeToggle();
     attachItemCalculation();
+    attachDocNumberListener();
+    attachBillVatToggle();
+    attachBillAitToggle();
+    setupPreviewScaling();
 });
 
 function initializeChalanNumber() {
@@ -63,12 +74,93 @@ function initializeChalanNumber() {
         quotationCounter = 1;
         localStorage.setItem(QUOTATION_COUNTER_KEY, quotationCounter);
     }
-    
-    document.getElementById('chalanNo').value = formatChalanNumber(counter);
+
+    applyDocumentNumberForMode('chalan');
 }
 
 function formatChalanNumber(num) {
     return String(num).padStart(4, '0');
+}
+
+function getAutoNumberForMode(mode) {
+    const counter = mode === 'bill'
+        ? localStorage.getItem(BILL_COUNTER_KEY) || '1'
+        : mode === 'quotation'
+            ? localStorage.getItem(QUOTATION_COUNTER_KEY) || '1'
+            : localStorage.getItem(CHALAN_COUNTER_KEY) || '1';
+    return formatChalanNumber(counter);
+}
+
+function persistCurrentDocNumber() {
+    const state = docNumberState[currentMode];
+    const value = chalanNoInput.value.trim();
+    state.value = value;
+    state.manual = value !== '' && value !== state.auto;
+}
+
+function syncManualNumberToCounter() {
+    const state = docNumberState[currentMode];
+    const value = chalanNoInput.value.trim();
+
+    if (!value) {
+        state.manual = false;
+        state.value = '';
+        applyDocumentNumberForMode(currentMode);
+        return;
+    }
+
+    if (!state.manual) {
+        return;
+    }
+
+    if (!/^\d+$/.test(value)) {
+        return;
+    }
+
+    const manualNumber = parseInt(value, 10);
+    const nextNumber = manualNumber + 1;
+
+    if (currentMode === 'bill') {
+        localStorage.setItem(BILL_COUNTER_KEY, String(nextNumber));
+        updateAutoNumberForMode('bill', formatChalanNumber(nextNumber));
+    } else if (currentMode === 'quotation') {
+        localStorage.setItem(QUOTATION_COUNTER_KEY, String(nextNumber));
+        updateAutoNumberForMode('quotation', formatChalanNumber(nextNumber));
+    } else {
+        localStorage.setItem(CHALAN_COUNTER_KEY, String(nextNumber));
+        updateAutoNumberForMode('chalan', formatChalanNumber(nextNumber));
+    }
+}
+
+function applyDocumentNumberForMode(mode) {
+    const state = docNumberState[mode];
+    const autoValue = getAutoNumberForMode(mode);
+    state.auto = autoValue;
+    chalanNoInput.dataset.auto = autoValue;
+
+    const manualValue = (state.value || '').trim();
+    if (state.manual && manualValue) {
+        chalanNoInput.value = manualValue;
+    } else {
+        chalanNoInput.value = autoValue;
+        state.value = autoValue;
+        state.manual = false;
+    }
+}
+
+function updateAutoNumberForMode(mode, autoValue) {
+    const state = docNumberState[mode];
+    state.auto = autoValue;
+
+    if (currentMode !== mode) {
+        return;
+    }
+
+    chalanNoInput.dataset.auto = autoValue;
+    if (!state.manual) {
+        chalanNoInput.value = autoValue;
+        state.value = autoValue;
+    }
 }
 
 function incrementChalanNumber() {
@@ -107,6 +199,154 @@ function attachEventListeners() {
     newChalanBtn.addEventListener('click', startNewChalan);
 }
 
+function attachDocNumberListener() {
+    chalanNoInput.addEventListener('input', () => {
+        persistCurrentDocNumber();
+    });
+    chalanNoInput.addEventListener('blur', () => {
+        syncManualNumberToCounter();
+    });
+    chalanNoInput.addEventListener('change', () => {
+        syncManualNumberToCounter();
+    });
+}
+
+function attachBillVatToggle() {
+    const vatModeSelect = document.getElementById('billVatMode');
+    const vatAmountGroup = document.getElementById('billVatAmountGroup');
+    const vatAmountInput = document.getElementById('billVatAmount');
+
+    if (!vatModeSelect || !vatAmountGroup || !vatAmountInput) {
+        return;
+    }
+
+    const applyVatVisibility = () => {
+        const includeVat = vatModeSelect.value === 'include';
+        vatAmountGroup.style.display = includeVat ? '' : 'none';
+        if (!includeVat) {
+            vatAmountInput.value = '';
+        }
+    };
+
+    vatModeSelect.addEventListener('change', applyVatVisibility);
+    applyVatVisibility();
+}
+
+function attachBillAitToggle() {
+    const aitModeSelect = document.getElementById('billAitMode');
+    const aitAmountGroup = document.getElementById('billAitAmountGroup');
+    const aitAmountInput = document.getElementById('billAitAmount');
+
+    if (!aitModeSelect || !aitAmountGroup || !aitAmountInput) {
+        return;
+    }
+
+    const applyAitVisibility = () => {
+        const includeAit = aitModeSelect.value === 'include';
+        aitAmountGroup.style.display = includeAit ? '' : 'none';
+        if (!includeAit) {
+            // Clear any stale amount so it can never leak into calculations.
+            aitAmountInput.value = '';
+        }
+    };
+
+    aitModeSelect.addEventListener('change', applyAitVisibility);
+    applyAitVisibility();
+}
+
+// Normalize a money input to a non-negative number. blank/invalid -> 0,
+// negatives are clamped (matches the min="0" on the charge inputs).
+function normalizeMoney(value) {
+    const n = parseFloat(value);
+    if (Number.isNaN(n)) return 0;
+    return n > 0 ? n : 0;
+}
+
+// Paginate document items into page groups.
+//   normalCapacity - max item rows on a non-final page (no totals/footer)
+//   finalCapacity  - max item rows on the final page (totals/footer present)
+//
+// Strategy (minimum pages + front-filled rows):
+//   1. Compute the minimum number of pages P such that the final page holds at
+//      most finalCapacity rows and every earlier page at most normalCapacity:
+//        total <= normalCapacity * (P - 1) + finalCapacity
+//   2. Allocate rows from the FRONT. Each non-final page takes the maximum
+//      number of real items it can hold while still leaving at least one item
+//      for every remaining page (so the final page always gets >= 1 real item
+//      and never exceeds finalCapacity).
+//
+// Real items are therefore front-loaded: an earlier page never shows a blank
+// slot while a real item that could legally occupy it still exists on a later
+// page. Blank rows are only presentation fillers added after allocation.
+// Examples (no AIT): 13 items -> [12, 1], 20 -> [12, 7, 1], 29 -> [12, 12, 5].
+function paginateItems(items, normalCapacity, finalCapacity) {
+    const total = items.length;
+    if (total === 0) {
+        return [{ items: [], isLastPage: true }];
+    }
+    if (total <= finalCapacity) {
+        return [{ items: items.slice(), isLastPage: true }];
+    }
+
+    const P = Math.ceil((total - finalCapacity) / normalCapacity) + 1;
+    const pages = [];
+    let start = 0;
+    for (let p = 0; p < P - 1; p++) {
+        const remainingItems = total - start;
+        const pagesAfterCurrent = P - p - 1;
+        // Take as many real items as this page can hold, while leaving at least
+        // one real item for every remaining page (including the final page).
+        const take = Math.max(1, Math.min(normalCapacity, remainingItems - pagesAfterCurrent));
+        pages.push({ items: items.slice(start, start + take), isLastPage: false });
+        start += take;
+    }
+
+    pages.push({ items: items.slice(start), isLastPage: true });
+    return pages;
+}
+
+// Chalan uses the same front-filled pagination strategy as the Bill, but with
+// its own measured page capacities (12 items on a normal page, 8 on the final
+// page which also carries the quantity-total row, Quantity-in-Word row and
+// signatory footer). The distribution itself is identical to paginateItems().
+function paginateChalanItems(items, normalCapacity, finalCapacity) {
+    return paginateItems(items, normalCapacity, finalCapacity);
+}
+
+// Render `count` empty presentation-only item rows.
+//
+// These fill a page's item-grid to its fixed capacity so a Bill/Chalan stays a
+// full-height A4 form even with a single item. They are purely visual:
+//   - no real item data (so they never affect subtotal/total/Taka-in-word)
+//   - empty serial cells (so item numbering is untouched)
+//   - they never persist into the saved dataset and never add pages
+//
+// isBillMode controls the column set: Bill uses Sl/Desc/Qty/Rate/Amount,
+// Chalan uses Sl. No/Description/Origin/Packaging/Quantity.
+function renderBlankItemRows(count, isBillMode) {
+    let html = '';
+    for (let i = 0; i < count; i++) {
+        html += isBillMode ? `
+            <tr>
+                <td class="col-sl"></td>
+                <td class="col-desc"></td>
+                <td class="col-quantity"></td>
+                <td class="col-rate"></td>
+                <td class="col-amount"></td>
+            </tr>
+        ` : `
+            <tr>
+                <td class="col-sl"></td>
+                <td class="col-desc"></td>
+                <td class="col-origin"></td>
+                <td class="col-packaging"></td>
+                <td class="col-quantity"></td>
+            </tr>
+        `;
+    }
+    return html;
+}
+
 // ============================================
 // Mode Toggle (Chalan / Bill)
 // ============================================
@@ -126,6 +366,7 @@ function setupModeToggle() {
 }
 
 function switchMode(mode) {
+    persistCurrentDocNumber();
     currentMode = mode;
     
     // Update form title
@@ -145,12 +386,9 @@ function switchMode(mode) {
         newDocBtnText.textContent = 'New Bill';
         savedSectionTitle.textContent = 'Saved Bills';
         viewSavedBtnText.textContent = 'View Saved Bills';
-        
-        // Update document number
-        const billCounter = localStorage.getItem(BILL_COUNTER_KEY) || '1';
-        document.getElementById('chalanNo').value = formatChalanNumber(billCounter);
-        
+
         applyModeVisibility();
+        applyDocumentNumberForMode(mode);
     } else if (mode === 'quotation') {
         formTitle.textContent = 'Quotation Generator';
         docNoLabel.textContent = 'Quotation No';
@@ -160,10 +398,8 @@ function switchMode(mode) {
         savedSectionTitle.textContent = 'Saved Quotations';
         viewSavedBtnText.textContent = 'View Saved Quotations';
 
-        const quotationCounter = localStorage.getItem(QUOTATION_COUNTER_KEY) || '1';
-        document.getElementById('chalanNo').value = formatChalanNumber(quotationCounter);
-
         applyModeVisibility();
+        applyDocumentNumberForMode(mode);
     } else {
         formTitle.textContent = 'Chalan Generator';
         docNoLabel.textContent = 'Chalan No';
@@ -172,12 +408,9 @@ function switchMode(mode) {
         newDocBtnText.textContent = 'New Chalan';
         savedSectionTitle.textContent = 'Saved Chalans';
         viewSavedBtnText.textContent = 'View Saved Chalans';
-        
-        // Update document number
-        const chalanCounter = localStorage.getItem(CHALAN_COUNTER_KEY) || '1';
-        document.getElementById('chalanNo').value = formatChalanNumber(chalanCounter);
-        
+
         applyModeVisibility();
+        applyDocumentNumberForMode(mode);
     }
 }
 
@@ -341,6 +574,13 @@ function collectFormData() {
         quoteValidTill: document.getElementById('quoteValidTill')?.value || '',
         quoteIncludeVat: document.getElementById('quoteIncludeVat')?.value || 'include',
         quoteIncludeDelivery: document.getElementById('quoteIncludeDelivery')?.value || 'include',
+        quoteIncludeAit: document.getElementById('quoteIncludeAit')?.value || 'include',
+        laborBill: document.getElementById('laborBill')?.value.trim() || '',
+        transportBill: document.getElementById('transportBill')?.value.trim() || '',
+        billVatMode: document.getElementById('billVatMode')?.value || 'exclude',
+        billVatAmount: document.getElementById('billVatAmount')?.value.trim() || '',
+        billAitMode: document.getElementById('billAitMode')?.value || 'exclude',
+        billAitAmount: document.getElementById('billAitAmount')?.value.trim() || '',
         items: items,
         createdAt: new Date().toISOString()
     };
@@ -376,84 +616,43 @@ function renderChalanPreview(data) {
     }
     const isBillMode = data.mode === 'bill';
     const formattedDate = formatDate(data.date);
-    
-    // Calculate totals
-    let totalQuantity = 0;
-    let totalAmount = 0;
-    
-    data.items.forEach(item => {
-        const qty = parseFloat(item.quantity) || 0;
-        totalQuantity += qty;
-        
-        if (isBillMode) {
-            const amt = parseFloat(item.amount) || 0;
-            totalAmount += amt;
-        }
-    });
 
-    // Generate item rows (minimum 11 rows to keep more footer space)
-    let itemRowsHtml = '';
-    const minRows = 11;
-    const totalRows = Math.max(data.items.length, minRows);
-
-    for (let i = 0; i < totalRows; i++) {
-        if (i < data.items.length) {
-            const item = data.items[i];
-            
-            if (isBillMode) {
-                itemRowsHtml += `
-                    <tr>
-                        <td class="col-sl">${item.sl}</td>
-                        <td class="col-desc">${escapeHtml(item.description)}</td>
-                        <td class="col-quantity">${escapeHtml(item.quantity)} ${data.quantityUnit || 'kg'}</td>
-                        <td class="col-rate">${escapeHtml(item.rate)}</td>
-                        <td class="col-amount">${Math.round(parseFloat(item.amount) || 0)} /=</td>
-                    </tr>
-                `;
-            } else {
-                itemRowsHtml += `
-                    <tr>
-                        <td class="col-sl">${item.sl}</td>
-                        <td class="col-desc">${escapeHtml(item.description)}</td>
-                        <td class="col-origin">${escapeHtml(item.origin)}</td>
-                        <td class="col-packaging">${escapeHtml(item.packaging)}</td>
-                        <td class="col-quantity">${escapeHtml(item.quantity)} ${data.quantityUnit || 'kg'}</td>
-                    </tr>
-                `;
-            }
-        } else {
-            if (isBillMode) {
-                itemRowsHtml += `
-                    <tr>
-                        <td class="col-sl"></td>
-                        <td class="col-desc"></td>
-                        <td class="col-quantity"></td>
-                        <td class="col-rate"></td>
-                        <td class="col-amount"></td>
-                    </tr>
-                `;
-            } else {
-                itemRowsHtml += `
-                    <tr>
-                        <td class="col-sl"></td>
-                        <td class="col-desc"></td>
-                        <td class="col-origin"></td>
-                        <td class="col-packaging"></td>
-                        <td class="col-quantity"></td>
-                    </tr>
-                `;
-            }
-        }
+    if (isBillMode) {
+        renderPaginatedBillPreview(data, formattedDate);
+        return;
     }
 
-    // Table headers based on mode
-    const tableHeaders = isBillMode ? `
-        <th class="col-sl">Sl No</th>
-        <th class="col-desc">Description</th>
-        <th class="col-quantity">Quantity</th>
-        <th class="col-rate">Rate/Kg</th>
-        <th class="col-amount">Amount</th>
-    ` : `
+    renderPaginatedChalanPreview(data, formattedDate);
+}
+
+function renderPaginatedChalanPreview(data, formattedDate) {
+    // --- Measured page capacities (in item rows) ---------------------------
+    // Measured on the A4 pdf-export layout (see scripts/print-check.mjs and
+    // scripts/full-matrix.mjs): an A4 sheet's usable inner
+    // height is ~971px. The fixed chrome (header 202 + info rows 138 + thead 49
+    // + wrapper margins) leaves ~562px for the item grid on a normal page; with
+    // the Page-X-of-Y line (~21px) that fits exactly 12 item rows (44px each).
+    // The final page must also carry the Chalan total (quantity) row, the
+    // Quantity-In-Word row and the Authorized Signatory footer (~97px) plus the
+    // page line, so it fits exactly 8 item rows + 1 total row. Going above
+    // either capacity pushes the signatory/page line past the sheet edge.
+    const CHALAN_NORMAL_PAGE_CAPACITY = 12;
+    const CHALAN_FINAL_PAGE_CAPACITY = 8;
+
+    const quantityUnit = data.quantityUnit || 'kg';
+    const items = data.items || [];
+
+    // Totals are computed across ALL pages (not just the final page).
+    let totalQuantity = 0;
+    items.forEach((item) => {
+        totalQuantity += parseFloat(item.quantity) || 0;
+    });
+
+    // Balanced pagination using the shared strategy: normal pages hold up to 12
+    // items, the final page up to 8 (plus its total/footer).
+    const chunks = paginateChalanItems(items, CHALAN_NORMAL_PAGE_CAPACITY, CHALAN_FINAL_PAGE_CAPACITY);
+
+    const tableHeaders = `
         <th class="col-sl">Sl. No</th>
         <th class="col-desc">Description</th>
         <th class="col-origin">Origin</th>
@@ -461,129 +660,357 @@ function renderChalanPreview(data) {
         <th class="col-quantity">Quantity</th>
     `;
 
-    // Total row based on mode
-    const totalRow = isBillMode ? `
+    const totalQuantityValue = totalQuantity ? totalQuantity + ' ' + quantityUnit : '';
+
+    const totalRowHtml = `
         <tr class="chalan-total-row">
             <td colspan="4" style="text-align: right; padding-right: 20px;">Total</td>
-            <td class="col-amount">${totalAmount ? Math.round(totalAmount) + ' /=' : ''}</td>
-        </tr>
-    ` : `
-        <tr class="chalan-total-row">
-            <td colspan="4" style="text-align: right; padding-right: 20px;">Total</td>
-            <td class="col-quantity">${totalQuantity ? totalQuantity + ' ' + (data.quantityUnit || 'kg') : ''}</td>
+            <td class="col-quantity">${totalQuantityValue}</td>
         </tr>
     `;
 
-    // Badge and label text
-    const badgeText = isBillMode ? 'Bill' : 'Chalan';
-    const docNoLabel = isBillMode ? 'Bill No' : 'Chalan No';
-    
-    // Taka in words label
-    const takaLabel = isBillMode ? 'Taka(In Word)' : 'Quantity(In Word)';
-    const takaValue = isBillMode ? 
-        (totalAmount ? numberToWords(Math.floor(totalAmount)) + ' Taka Only' : '') :
-        (totalQuantity ? numberToWords(totalQuantity) + ' ' + (data.quantityUnit || 'kg') : '');
+    const takaValue = totalQuantity ? numberToWords(totalQuantity) + ' ' + quantityUnit : '';
 
-    const chalanHtml = `
-        <div class="chalan-content">
-            <!-- Header -->
-            <div class="chalan-header">
-                <div class="chalan-logo-section">
-                    <img src="logo.png" alt="SM Corporation" class="chalan-logo">
-                    <div class="chalan-company-info">
-                        <h1>SM CORPORATION</h1>
-                        <div class="chalan-contact">
-                            <div class="contact-item phone">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
-                                <span>01713675689</span>
-                            </div>
-                            <div class="contact-item facebook">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-                                <span>smcorporation.official.page</span>
-                            </div>
-                            <div class="contact-item email">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22 6C22 4.9 21.1 4 20 4H4C2.9 4 2 4.9 2 6V18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6ZM20 6L12 11L4 6H20ZM20 18H4V8L12 13L20 8V18Z" fill="currentColor"/></svg>
-                                <span>smcorporation.official@gmail.com</span>
-                            </div>
-                            <div class="contact-item address">
-                                <span>House: 29, Road: 06, Block: G, Aftabnagar, Dhaka-1212</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="chalan-badge">${badgeText}</div>
-            </div>
+    const pagesHtml = chunks.map((page, pageIndex) => {
+        const pageItems = page.items;
+        const isLastPage = !!page.isLastPage;
 
-            <!-- Info Row 1 -->
-            <div class="chalan-info-row">
-                <div class="chalan-info-cell" style="flex: 1;">
-                    <label>${docNoLabel}</label>
-                    <span>${escapeHtml(data.chalanNo)}</span>
-                </div>
-                <div class="chalan-info-cell" style="flex: 1;">
-                    <label>Date</label>
-                    <span>${formattedDate}</span>
-                </div>
-                <div class="chalan-info-cell" style="flex: 1;">
-                    <label>P/O</label>
-                    <span>${escapeHtml(data.poNo)}</span>
-                </div>
-            </div>
+        let itemRowsHtml = pageItems.map((item) => `
+            <tr>
+                <td class="col-sl">${item.sl}</td>
+                <td class="col-desc">${escapeHtml(item.description)}</td>
+                <td class="col-origin">${escapeHtml(item.origin)}</td>
+                <td class="col-packaging">${escapeHtml(item.packaging)}</td>
+                <td class="col-quantity">${escapeHtml(item.quantity)} ${quantityUnit}</td>
+            </tr>
+        `).join('');
 
-            <!-- Info Row 2 -->
-            <div class="chalan-info-row">
-                <div class="chalan-info-cell" style="flex: 2;">
-                    <label>Name</label>
-                    <span>${escapeHtml(data.customerName)}</span>
-                </div>
-                <div class="chalan-info-cell" style="flex: 1;">
-                    <label>Phone</label>
-                    <span>${escapeHtml(data.customerPhone)}</span>
-                </div>
-            </div>
+        // Fill each page's item grid to its fixed capacity with presentation
+        // only blank rows. Normal pages fill to CHALAN_NORMAL_PAGE_CAPACITY;
+        // the final page fills to CHALAN_FINAL_PAGE_CAPACITY and then carries
+        // the total row + Quantity-In-Word + signatory. Blanks carry no data,
+        // so quantity totals / Quantity-In-Word / saved items are unaffected.
+        const pageCapacity = isLastPage ? CHALAN_FINAL_PAGE_CAPACITY : CHALAN_NORMAL_PAGE_CAPACITY;
+        itemRowsHtml += renderBlankItemRows(Math.max(0, pageCapacity - pageItems.length), false);
 
-            <!-- Info Row 3 -->
-            <div class="chalan-info-row" style="margin-bottom: 15px;">
-                <div class="chalan-info-cell" style="flex: 1;">
-                    <label>Address</label>
-                    <span>${escapeHtml(data.customerAddress)}</span>
-                </div>
-            </div>
-
-            <!-- Items Table -->
-            <div class="items-table-wrapper">
-                <img src="logo.png" alt="Watermark" class="table-watermark">
-                <table class="chalan-items-table">
-                    <thead>
-                        <tr>
-                            ${tableHeaders}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${itemRowsHtml}
-                        ${totalRow}
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Footer -->
+        const footerHtml = isLastPage ? `
             <div class="chalan-footer">
                 <div class="chalan-taka-row">
-                    <label>${takaLabel}</label>
+                    <label>Quantity(In Word)</label>
                     <span>${takaValue}</span>
                 </div>
-                
+
                 <div class="chalan-signatory">
                     Authorized Signatory
                 </div>
             </div>
-        </div>
+        ` : '';
+
+        const pageNoHtml = chunks.length > 1
+            ? `<span class="bill-page-no">Page ${pageIndex + 1} of ${chunks.length}</span>`
+            : '';
+
+        const sheetClass = isLastPage ? 'bill-sheet' : 'bill-sheet bill-sheet-break';
+
+        return `
+            <div class="${sheetClass}">
+            <div class="chalan-content bill-page">
+                <div class="chalan-header">
+                    <div class="chalan-logo-section">
+                        <img src="logo.png" alt="SM Corporation" class="chalan-logo">
+                        <div class="chalan-company-info">
+                            <h1>SM CORPORATION</h1>
+                            <div class="chalan-contact">
+                                <div class="contact-item phone">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                                    <span>01713675689</span>
+                                </div>
+                                <div class="contact-item facebook">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                                    <span>smcorporation.official.page</span>
+                                </div>
+                                <div class="contact-item email">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22 6C22 4.9 21.1 4 20 4H4C2.9 4 2 4.9 2 6V18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6ZM20 6L12 11L4 6H20ZM20 18H4V8L12 13L20 8V18Z" fill="currentColor"/></svg>
+                                    <span>smcorporation.official@gmail.com</span>
+                                </div>
+                                <div class="contact-item address">
+                                    <span>Salam Mansion, Mitford Road, Mitford, Dhaka-1100</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chalan-badge">Chalan</div>
+                </div>
+
+                <div class="chalan-info-row">
+                    <div class="chalan-info-cell" style="flex: 1;">
+                        <label>Chalan No</label>
+                        <span>${escapeHtml(data.chalanNo)}</span>
+                    </div>
+                    <div class="chalan-info-cell" style="flex: 1;">
+                        <label>Date</label>
+                        <span>${formattedDate}</span>
+                    </div>
+                    <div class="chalan-info-cell" style="flex: 1;">
+                        <label>P/O</label>
+                        <span>${escapeHtml(data.poNo)}</span>
+                    </div>
+                </div>
+
+                <div class="chalan-info-row">
+                    <div class="chalan-info-cell" style="flex: 2;">
+                        <label>Name</label>
+                        <span>${escapeHtml(data.customerName)}</span>
+                    </div>
+                    <div class="chalan-info-cell" style="flex: 1;">
+                        <label>Phone</label>
+                        <span>${escapeHtml(data.customerPhone)}</span>
+                    </div>
+                </div>
+
+                <div class="chalan-info-row" style="margin-bottom: 15px;">
+                    <div class="chalan-info-cell" style="flex: 1;">
+                        <label>Address</label>
+                        <span>${escapeHtml(data.customerAddress)}</span>
+                    </div>
+                </div>
+
+                <div class="items-table-wrapper">
+                    <img src="logo.png" alt="Watermark" class="table-watermark">
+                    <table class="chalan-items-table">
+                        <thead>
+                            <tr>
+                                ${tableHeaders}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${itemRowsHtml}
+                            ${isLastPage ? totalRowHtml : ''}
+                        </tbody>
+                    </table>
+                </div>
+
+                ${footerHtml}
+                ${pageNoHtml}
+            </div>
+            </div>
+        `;
+    }).join('');
+
+    chalanPreview.classList.add('multi-page-preview');
+    chalanPreview.innerHTML = pagesHtml;
+}
+
+function renderPaginatedBillPreview(data, formattedDate) {
+    // --- Measured page capacities (in item rows) ---------------------------
+    // These are derived from the actual template layout (see the bilboarding
+    // measurements): an A4 sheet is 210x297mm; the header + table header use
+    // ~398px of the ~962px usable inner height and each item row is ~44px.
+    // A normal (non-final) page has no totals/footer, so it can hold more rows
+    // than the final page, which must also fit Subtotal/Labor/Transport/
+    // AIT/VAT/Total + Taka-in-word + Authorized Signatory.
+    const NORMAL_PAGE_CAPACITY = 12;
+    const FINAL_PAGE_CAPACITY_NO_AIT = 5;
+    const FINAL_PAGE_CAPACITY_WITH_AIT = 4;
+
+    const quantityUnit = data.quantityUnit || 'kg';
+    const items = data.items || [];
+
+    let totalAmount = 0;
+    items.forEach((item) => {
+        totalAmount += (parseFloat(item.amount) || 0);
+    });
+
+    const laborBillAmount = normalizeMoney(data.laborBill);
+    const transportBillAmount = normalizeMoney(data.transportBill);
+    const vatAmount = data.billVatMode === 'include' ? normalizeMoney(data.billVatAmount) : 0;
+    const aitIncluded = data.billAitMode === 'include';
+    const aitAmount = aitIncluded ? normalizeMoney(data.billAitAmount) : 0;
+    const grandTotalAmount = totalAmount + laborBillAmount + transportBillAmount + aitAmount + vatAmount;
+
+    const finalCapacity = aitIncluded ? FINAL_PAGE_CAPACITY_WITH_AIT : FINAL_PAGE_CAPACITY_NO_AIT;
+
+    // Build the pagination: fill normal pages from the front as full as
+    // reasonably possible (each <= NORMAL_PAGE_CAPACITY), leaving a remainder
+    // (>= 1, <= finalCapacity) that, together with the totals/footer, fits on
+    // the final page. NEVER force a tiny first page just so the last page fits.
+    const chunks = paginateItems(items, NORMAL_PAGE_CAPACITY, finalCapacity);
+
+    const tableHeaders = `
+        <th class="col-sl">Sl No</th>
+        <th class="col-desc">Description</th>
+        <th class="col-quantity">Quantity</th>
+        <th class="col-rate">Rate/Kg</th>
+        <th class="col-amount">Amount</th>
     `;
 
-    chalanPreview.innerHTML = chalanHtml;
+    const aitRowHtml = aitIncluded ? `
+        <tr class="chalan-total-row">
+            <td colspan="4" style="text-align: right; padding-right: 20px;">AIT</td>
+            <td class="col-amount"><span class="money-value">${Math.round(aitAmount)} /=</span></td>
+        </tr>
+    ` : '';
+
+    const totalRowsHtml = `
+        <tr class="chalan-total-row">
+            <td colspan="4" style="text-align: right; padding-right: 20px;">Item Subtotal</td>
+            <td class="col-amount"><span class="money-value">${Math.round(totalAmount)} /=</span></td>
+        </tr>
+        <tr class="chalan-total-row">
+            <td colspan="4" style="text-align: right; padding-right: 20px;">Labor Bill</td>
+            <td class="col-amount"><span class="money-value">${laborBillAmount ? Math.round(laborBillAmount) + ' /=' : '0 /='}</span></td>
+        </tr>
+        <tr class="chalan-total-row">
+            <td colspan="4" style="text-align: right; padding-right: 20px;">Transport Bill</td>
+            <td class="col-amount"><span class="money-value">${transportBillAmount ? Math.round(transportBillAmount) + ' /=' : '0 /='}</span></td>
+        </tr>
+        ${aitRowHtml}
+        <tr class="chalan-total-row">
+            <td colspan="4" style="text-align: right; padding-right: 20px;">VAT</td>
+            <td class="col-amount"><span class="money-value">${vatAmount ? Math.round(vatAmount) + ' /=' : '0 /='}</span></td>
+        </tr>
+        <tr class="chalan-total-row">
+            <td colspan="4" style="text-align: right; padding-right: 20px;">Total</td>
+            <td class="col-amount"><span class="money-value">${Math.round(grandTotalAmount)} /=</span></td>
+        </tr>
+    `;
+
+    const takaValue = grandTotalAmount ? numberToWords(Math.floor(grandTotalAmount)) + ' Taka Only' : '';
+
+    const pagesHtml = chunks.map((page, pageIndex) => {
+        const pageItems = page.items;
+        const isLastPage = !!page.isLastPage;
+
+        let itemRowsHtml = pageItems.map((item) => `
+            <tr>
+                <td class="col-sl">${item.sl}</td>
+                <td class="col-desc">${escapeHtml(item.description)}</td>
+                <td class="col-quantity">${escapeHtml(item.quantity)} ${quantityUnit}</td>
+                <td class="col-rate">${escapeHtml(item.rate)}</td>
+                <td class="col-amount"><span class="money-value">${Math.round(parseFloat(item.amount) || 0)} /=</span></td>
+            </tr>
+        `).join('');
+
+        // Fill each page's item grid to its fixed capacity with presentation
+        // only blank rows. Normal pages fill to NORMAL_PAGE_CAPACITY; the final
+        // page fills to finalCapacity and then carries the totals/footer. This
+        // keeps every sheet a visually consistent full-height A4 form. Blanks
+        // carry no data, so totals/Taka-in-word/saved items are unaffected and
+        // no extra pages are produced. The logical distribution produced by
+        // paginateItems() is left untouched.
+        const pageCapacity = isLastPage ? finalCapacity : NORMAL_PAGE_CAPACITY;
+        itemRowsHtml += renderBlankItemRows(Math.max(0, pageCapacity - pageItems.length), true);
+
+        const footerHtml = isLastPage ? `
+            <div class="chalan-footer">
+                <div class="chalan-taka-row">
+                    <label>Taka(In Word)</label>
+                    <span>${takaValue}</span>
+                </div>
+
+                <div class="chalan-signatory">
+                    Authorized Signatory
+                </div>
+            </div>
+        ` : '';
+
+        const pageNoHtml = chunks.length > 1
+            ? `<span class="bill-page-no">Page ${pageIndex + 1} of ${chunks.length}</span>`
+            : '';
+
+        const sheetClass = isLastPage ? 'bill-sheet' : 'bill-sheet bill-sheet-break';
+
+        return `
+            <div class="${sheetClass}">
+            <div class="chalan-content bill-page">
+                <div class="chalan-header">
+                    <div class="chalan-logo-section">
+                        <img src="logo.png" alt="SM Corporation" class="chalan-logo">
+                        <div class="chalan-company-info">
+                            <h1>SM CORPORATION</h1>
+                            <div class="chalan-contact">
+                                <div class="contact-item phone">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                                    <span>01713675689</span>
+                                </div>
+                                <div class="contact-item facebook">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                                    <span>smcorporation.official.page</span>
+                                </div>
+                                <div class="contact-item email">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22 6C22 4.9 21.1 4 20 4H4C2.9 4 2 4.9 2 6V18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6ZM20 6L12 11L4 6H20ZM20 18H4V8L12 13L20 8V18Z" fill="currentColor"/></svg>
+                                    <span>smcorporation.official@gmail.com</span>
+                                </div>
+                                <div class="contact-item address">
+                                    <span>Salam Mansion, Mitford Road, Mitford, Dhaka-1100</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chalan-badge">Bill</div>
+                </div>
+
+                <div class="chalan-info-row">
+                    <div class="chalan-info-cell" style="flex: 1;">
+                        <label>Bill No</label>
+                        <span>${escapeHtml(data.chalanNo)}</span>
+                    </div>
+                    <div class="chalan-info-cell" style="flex: 1;">
+                        <label>Date</label>
+                        <span>${formattedDate}</span>
+                    </div>
+                    <div class="chalan-info-cell" style="flex: 1;">
+                        <label>P/O</label>
+                        <span>${escapeHtml(data.poNo)}</span>
+                    </div>
+                </div>
+
+                <div class="chalan-info-row">
+                    <div class="chalan-info-cell" style="flex: 2;">
+                        <label>Name</label>
+                        <span>${escapeHtml(data.customerName)}</span>
+                    </div>
+                    <div class="chalan-info-cell" style="flex: 1;">
+                        <label>Phone</label>
+                        <span>${escapeHtml(data.customerPhone)}</span>
+                    </div>
+                </div>
+
+                <div class="chalan-info-row" style="margin-bottom: 15px;">
+                    <div class="chalan-info-cell" style="flex: 1;">
+                        <label>Address</label>
+                        <span>${escapeHtml(data.customerAddress)}</span>
+                    </div>
+                </div>
+
+                <div class="items-table-wrapper">
+                    <img src="logo.png" alt="Watermark" class="table-watermark">
+                    <table class="chalan-items-table bill-items-table">
+                        <thead>
+                            <tr>
+                                ${tableHeaders}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${itemRowsHtml}
+                            ${isLastPage ? totalRowsHtml : ''}
+                        </tbody>
+                    </table>
+                </div>
+
+                ${footerHtml}
+                ${pageNoHtml}
+            </div>
+            </div>
+        `;
+    }).join('');
+
+    chalanPreview.classList.add('multi-page-preview');
+    chalanPreview.innerHTML = pagesHtml;
 }
 
 function renderQuotationPreview(data) {
+    chalanPreview.classList.remove('multi-page-preview');
     const formattedDate = formatDate(data.date);
     const subject = 'Quotation Letter';
 
@@ -604,10 +1031,12 @@ function renderQuotationPreview(data) {
     const deliveryLine = data.quoteIncludeDelivery === 'exclude'
         ? 'Excluding Delivery Charge'
         : 'Including Delivery Charge';
+    const aitLine = data.quoteIncludeAit === 'exclude' ? 'Excluding AIT' : 'Including AIT';
     const autoTerms = [
         validTill ? `The quotation will be valid till ${validTill}` : 'The quotation will be valid till ____',
         vatLine,
-        deliveryLine
+        deliveryLine,
+        aitLine
     ];
     const finalTerms = termsLines.slice();
     const normalized = new Set(finalTerms.map(term => term.toLowerCase()));
@@ -654,7 +1083,7 @@ function renderQuotationPreview(data) {
                                 <span>smcorporation.official@gmail.com</span>
                             </div>
                             <div class="contact-item address">
-                                <span>House: 29, Road: 06, Block: G, Aftabnagar, Dhaka-1212</span>
+                                <span>Salam Mansion, Mitford Road, Mitford, Dhaka-1100</span>
                             </div>
                         </div>
                     </div>
@@ -816,12 +1245,74 @@ function showInputForm() {
     inputSection.classList.remove('hidden');
     savedSection.classList.add('hidden');
     previewSection.classList.add('hidden');
+    requestAnimationFrame(updatePreviewScale);
 }
 
 function showPreviewSection() {
     inputSection.classList.add('hidden');
     savedSection.classList.add('hidden');
     previewSection.classList.remove('hidden');
+    requestAnimationFrame(updatePreviewScale);
+}
+
+// ============================================
+// Responsive preview scaling
+// ============================================
+
+// The A4 document (#chalan-preview) is ALWAYS a fixed 210mm sheet with real
+// A4 geometry - its width must never depend on the viewport or pagination
+// capacities / PDF page count / centering would break. On narrow screens we
+// only *visually* scale it down via a transform on the wrapper
+// (.preview-scale); the wrapper reserves the scaled height so pages never
+// overlap and the browser never gains a horizontal scrollbar.
+//
+// The transform lives on the wrapper, never on the document itself, so:
+//   - .pdf-export (html2pdf clones #chalan-preview) is unaffected
+//   - @media print resets the wrapper back to natural size
+//   - a PDF from a 375px phone is geometrically identical to one from a
+//     1440px desktop.
+let previewScale = 1;
+
+function updatePreviewScale() {
+    const viewport = document.querySelector('.preview-viewport');
+    const wrapper = document.querySelector('.preview-scale');
+    if (!viewport || !wrapper || !chalanPreview) return;
+    if (!chalanPreview.innerHTML.trim()) return;
+
+    const naturalWidth = parseFloat(getComputedStyle(chalanPreview).width);
+    if (!naturalWidth || !isFinite(naturalWidth)) return;
+
+    const availableWidth = viewport.clientWidth;
+    if (!availableWidth) return;
+
+    // Natural (untransformed) layout height: the whole stacked document.
+    const naturalHeight = chalanPreview.getBoundingClientRect().height / previewScale;
+
+    const scale = Math.min(1, availableWidth / naturalWidth);
+    previewScale = scale;
+
+    if (scale >= 1) {
+        wrapper.style.transform = '';
+        wrapper.style.width = '';
+        wrapper.style.height = '';
+        return;
+    }
+
+    wrapper.style.transformOrigin = 'top left';
+    wrapper.style.transform = `scale(${scale})`;
+    wrapper.style.width = `${(naturalWidth * scale).toFixed(3)}px`;
+    wrapper.style.height = `${(naturalHeight * scale).toFixed(3)}px`;
+}
+
+function setupPreviewScaling() {
+    const viewport = document.querySelector('.preview-viewport');
+    if (!viewport || typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver(() => updatePreviewScale());
+    observer.observe(viewport);
+    observer.observe(chalanPreview);
+    window.addEventListener('resize', updatePreviewScale);
+    updatePreviewScale();
 }
 
 function showSavedChalans() {
@@ -876,31 +1367,83 @@ function downloadPdf() {
         margin: 0,
         filename: fileName,
         image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 1.5, useCORS: true, backgroundColor: '#ffffff', scrollX: 0, scrollY: 0 },
+        html2canvas: {
+            scale: 3,
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            scrollX: 0,
+            scrollY: 0
+        },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['avoid-all'] }
+        pagebreak: { mode: ['css', 'legacy'] }
     };
 
+    // Robust multi-step PDF export.
+    // Root cause of "PDF download failed. Please try again.":
+    //  (a) html2canvas re-fetches <img src="logo.png"> as a cross-origin
+    //      (file://) resource. Drawing that taints the canvas, so the later
+    //      toDataURL() throws a SecurityError that a generic catch swallows.
+    //      Inlining a data:URI for the logo avoids the cross-origin fetch.
+    //  (b) html2pdf's bundled FileSaver triggers the download via a detached
+    //      anchor clicked on a setTimeout(0) after revoking the blob URL. That
+    //      is fragile across browsers/headless and can be dropped silently.
+    //      Instead we produce the PDF Blob with the worker's outputPdf() and
+    //      drive the actual file download ourselves with a DOM-attached anchor,
+    //      which browsers treat as a normal, allowed user-initiated download.
     document.body.classList.add('pdf-export');
 
-    html2pdf().set(options).from(chalanPreview).save().then(() => {
+    const swappedImages = [];
+    if (typeof LOGO_DATA_URI === 'string') {
+        chalanPreview.querySelectorAll('img').forEach((img) => {
+            const src = img.getAttribute('src') || '';
+            if (src.includes('logo.png')) {
+                swappedImages.push({ img, src });
+                img.setAttribute('src', LOGO_DATA_URI);
+            }
+        });
+    }
+
+    html2pdf().set(options).from(chalanPreview).outputPdf('blob').then((blob) => {
+        // Counter/serial advances only after the PDF bytes are successfully
+        // produced, matching the previous save()-based behaviour.
         setTimeout(() => {
             if (currentChalanData.mode === 'bill') {
                 const newCounter = incrementBillNumber();
-                document.getElementById('chalanNo').value = formatChalanNumber(newCounter);
+                updateAutoNumberForMode('bill', formatChalanNumber(newCounter));
             } else if (currentChalanData.mode === 'quotation') {
                 const newCounter = incrementQuotationNumber();
-                document.getElementById('chalanNo').value = formatChalanNumber(newCounter);
+                updateAutoNumberForMode('quotation', formatChalanNumber(newCounter));
             } else {
                 const newCounter = incrementChalanNumber();
-                document.getElementById('chalanNo').value = formatChalanNumber(newCounter);
+                updateAutoNumberForMode('chalan', formatChalanNumber(newCounter));
             }
         }, 1000);
-    }).catch(() => {
+
+        triggerPdfDownload(blob, fileName);
+    }).catch((error) => {
+        // Keep a real diagnostic in the console so future failures are not
+        // hidden behind the generic alert.
+        console.error('PDF generation failed:', error);
         alert('PDF download failed. Please try again.');
     }).finally(() => {
+        swappedImages.forEach(({ img, src }) => img.setAttribute('src', src));
         document.body.classList.remove('pdf-export');
     });
+}
+
+// Depend on an anchor that is actually part of the document so the "download"
+// attribute applies a normal, allowed download. The blob URL is revoked well
+// after the click (matching FileSaver's own deferred cleanup).
+function triggerPdfDownload(blob, filename) {
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    anchor.rel = 'noopener';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 40000);
 }
 
 
@@ -984,6 +1527,22 @@ function startNewChalan() {
     document.getElementById('customerPhone').value = '';
     document.getElementById('customerAddress').value = '';
     document.getElementById('poNo').value = '';
+    const laborBill = document.getElementById('laborBill');
+    const transportBill = document.getElementById('transportBill');
+    const billVatMode = document.getElementById('billVatMode');
+    const billVatAmount = document.getElementById('billVatAmount');
+    const billVatAmountGroup = document.getElementById('billVatAmountGroup');
+    const billAitMode = document.getElementById('billAitMode');
+    const billAitAmount = document.getElementById('billAitAmount');
+    const billAitAmountGroup = document.getElementById('billAitAmountGroup');
+    if (laborBill) laborBill.value = '';
+    if (transportBill) transportBill.value = '';
+    if (billVatMode) billVatMode.value = 'exclude';
+    if (billVatAmount) billVatAmount.value = '';
+    if (billVatAmountGroup) billVatAmountGroup.style.display = 'none';
+    if (billAitMode) billAitMode.value = 'exclude';
+    if (billAitAmount) billAitAmount.value = '';
+    if (billAitAmountGroup) billAitAmountGroup.style.display = 'none';
 
     const quoteTo = document.getElementById('quoteTo');
     const quoteAttentionName = document.getElementById('quoteAttentionName');
@@ -992,6 +1551,7 @@ function startNewChalan() {
     const quoteValidTill = document.getElementById('quoteValidTill');
     const quoteIncludeVat = document.getElementById('quoteIncludeVat');
     const quoteIncludeDelivery = document.getElementById('quoteIncludeDelivery');
+    const quoteIncludeAit = document.getElementById('quoteIncludeAit');
 
     if (quoteTo) quoteTo.value = '';
     if (quoteAttentionName) quoteAttentionName.value = '';
@@ -1000,21 +1560,19 @@ function startNewChalan() {
     if (quoteValidTill) quoteValidTill.value = '';
     if (quoteIncludeVat) quoteIncludeVat.value = 'include';
     if (quoteIncludeDelivery) quoteIncludeDelivery.value = 'include';
+    if (quoteIncludeAit) quoteIncludeAit.value = 'include';
 
     // Reset items table
     itemsTableBody.innerHTML = '';
     addItemRow();
 
     // Update document number and date
-    const currentCounter = currentMode === 'bill'
-        ? localStorage.getItem(BILL_COUNTER_KEY) || '1'
-        : currentMode === 'quotation'
-            ? localStorage.getItem(QUOTATION_COUNTER_KEY) || '1'
-            : localStorage.getItem(CHALAN_COUNTER_KEY) || '1';
-    document.getElementById('chalanNo').value = formatChalanNumber(currentCounter);
+    applyDocumentNumberForMode(currentMode);
     setTodayDate();
 
     currentChalanData = null;
+    chalanPreview.classList.remove('multi-page-preview');
+    chalanPreview.innerHTML = '';
     showInputForm();
 }
 

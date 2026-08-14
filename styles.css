@@ -546,6 +546,31 @@ body {
 }
 
 /* ============================================
+   Preview Viewport (responsive A4 scaling)
+   ============================================
+
+   The document itself (#chalan-preview) is ALWAYS a fixed 210mm A4 sheet at
+   its natural size. On narrow screens a small script scales the wrapper
+   (.preview-scale) down with a pure transform and reserves the scaled layout
+   height, so the whole page remains visible without horizontal overflow.
+
+   The transform lives on the wrapper only - never on the document - so the
+   .pdf-export clone (which copies #chalan-preview) and @media print are
+   completely unaffected and always produce a full-size A4 page.
+   */
+
+.preview-viewport {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.preview-scale {
+    transform-origin: top left;
+}
+
+/* ============================================
    Chalan Paper (A4 Format)
    ============================================ */
 
@@ -565,16 +590,48 @@ body {
 .pdf-export .chalan-paper {
     box-sizing: border-box;
     width: 210mm;
-    height: 297mm;
-    min-height: 297mm;
+    max-width: none;
+    margin: 0 auto;
     padding: 15mm;
     box-shadow: none;
-    margin: 0;
 }
 
 .pdf-export .chalan-content {
-    height: 100%;
+    height: auto;
     box-sizing: border-box;
+}
+
+/* Screen preview full-height forms: mirror the pdf-export layout so the on
+   screen preview matches the downloaded PDF. Blank presentation rows (fixed
+   44px slots) fill each page's item grid, the table area flexes to absorb the
+   remaining height, and the signature footer is pinned near the page bottom.
+   No content is stretched — only blank slots distribute. (The quotation uses
+   .quotation-content, not .chalan-content, so it is not affected by the
+   .chalan-content rules here and keeps its own sizing.) */
+.chalan-paper:not(.multi-page-preview) {
+    height: 297mm;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+
+.chalan-paper:not(.multi-page-preview) .chalan-content {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+}
+
+.chalan-paper.multi-page-preview .bill-page {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+}
+
+.chalan-paper.multi-page-preview .bill-page .chalan-footer,
+.chalan-paper:not(.multi-page-preview) .chalan-content .chalan-footer {
+    margin-top: auto;
 }
 
 .pdf-export .quotation-content {
@@ -597,7 +654,48 @@ body {
     position: relative;
     z-index: 1;
     border: 3px solid #000;
-    padding: 15px 15px 25px;
+    padding: 15px;
+}
+
+.chalan-paper.multi-page-preview {
+    width: 210mm;
+    min-height: auto;
+    padding: 0;
+    box-shadow: none;
+    background: transparent;
+}
+
+.chalan-paper.multi-page-preview .bill-sheet {
+    width: 210mm;
+    height: 297mm;
+    min-height: 297mm;
+    padding-top: 15mm;
+    padding-right: 15mm;
+    padding-bottom: 15mm;
+    padding-left: 15mm;
+    box-sizing: border-box;
+    background: white;
+    margin: 0 auto 10mm auto;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+}
+
+.chalan-paper.multi-page-preview .bill-page {
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+}
+
+.chalan-paper.multi-page-preview .bill-sheet:last-child {
+    margin-bottom: 0;
+}
+
+.bill-page-no {
+    display: block;
+    margin-top: 6px;
+    text-align: right;
+    font-size: 12px;
+    color: #444;
 }
 
 /* Quotation Layout */
@@ -903,30 +1001,61 @@ body {
     text-align: center;
 }
 
-.chalan-items-table .col-rate,
+.chalan-items-table .col-rate {
+    width: 14%;
+    text-align: center;
+}
+
+/* Amount column needs enough width to keep "<number> /=" on one line for
+   large monetary values (see .money-value below for the nowrap rule). */
 .chalan-items-table .col-amount {
-    width: 15%;
+    width: 23%;
+    text-align: center;
+}
+
+/* Bill mode uses col-desc/col-quantity too, but only the Bill table carries
+   this extra class, so Chalan's column proportions are left untouched. */
+.bill-items-table .col-desc {
+    width: 31%;
+}
+
+.bill-items-table .col-quantity {
+    width: 13%;
     text-align: center;
 }
 
 .chalan-items-table tbody tr {
-    height: 35px;
+    /* Every item slot renders at a fixed 44px so blank (presentation-only)
+       rows occupy exactly the same vertical space as real item rows. This is
+       what keeps a 1-item Bill/Chalan visually identical in height to a full
+       one, without stretching real content. */
+    height: 44px;
 }
 
+/* Kept transparent (rather than a solid fill) so the watermark behind the
+   items table is not occluded under the totals rows; bold text is enough
+   to visually distinguish these rows without an opaque background. */
 .chalan-total-row td {
     font-weight: 600;
-    background: #f9f9f9;
+    background: transparent;
+}
+
+/* Keeps "<amount> /=" together as one inline unit so it can never wrap or
+   overlap, regardless of column width rounding or PDF font substitution. */
+.money-value {
+    display: inline-block;
+    white-space: nowrap;
 }
 
 /* Footer Section */
 .chalan-footer {
-    margin-top: 20px;
+    margin-top: 10px;
 }
 
 .chalan-taka-row {
     display: flex;
     border: 1px solid #000;
-    margin-bottom: 20px;
+    margin-bottom: 12px;
 }
 
 .chalan-taka-row label {
@@ -951,7 +1080,7 @@ body {
     border-top: 1px solid #000;
     width: 200px;
     margin-left: auto;
-    margin-top: 45px;
+    margin-top: 30px;
 }
 
 /* ============================================
@@ -995,6 +1124,19 @@ body {
         min-height: auto;
     }
 
+    /* Screen preview scaling must never affect print: the wrapper is reset to
+       natural size and the document prints at full fixed A4 geometry. */
+    .preview-viewport {
+        overflow: visible !important;
+        display: block !important;
+    }
+
+    .preview-scale {
+        transform: none !important;
+        width: auto !important;
+        height: auto !important;
+    }
+
     .chalan-paper {
         width: 210mm;
         height: 290mm;
@@ -1014,7 +1156,7 @@ body {
     }
 
     .chalan-signatory {
-        margin-top: 50px !important;
+        margin-top: 30px !important;
     }
 
 
@@ -1076,7 +1218,7 @@ body {
         opacity: 0.08 !important;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
-        width: 1600px !important;
+        width: 400px !important;
     }
 
     .chalan-badge,
@@ -1104,10 +1246,21 @@ body {
         padding: 30px;
     }
 
-    .chalan-paper {
-        width: 100%;
-        min-height: auto;
-        padding: 20px;
+    /* Two-column form layout on tablets/small laptops; the document preview is
+       handled by the JS preview scaling (fixed A4, visually scaled), so no
+       width override is applied to .chalan-paper here. */
+    .form-group-row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+    }
+
+    .form-group-row .form-group {
+        margin-bottom: 0;
+    }
+
+    .form-group.flex-2 {
+        grid-column: span 2;
     }
 }
 
@@ -1132,17 +1285,22 @@ body {
         height: 80px;
     }
 
+    /* Forms collapse to a single column on phones/portrait tablets. */
     .form-group-row {
-        flex-direction: column;
-        gap: 0;
+        grid-template-columns: 1fr;
+        gap: 12px;
     }
 
     .form-group.flex-2 {
-        flex: 1;
+        grid-column: span 1;
     }
 
     .form-actions {
         flex-direction: column;
+    }
+
+    .mode-toggle {
+        flex-wrap: wrap;
     }
 
     .items-header {
@@ -1160,76 +1318,9 @@ body {
         padding: 8px 6px;
     }
 
-    /* Chalan Preview */
-    .chalan-paper {
-        width: 100%;
-        min-height: auto;
-        padding: 15px;
-        font-size: 11px;
-    }
-
-    .chalan-header {
-        flex-direction: column;
-        align-items: center;
-        text-align: center;
-        gap: 15px;
-        padding: 10px;
-    }
-
-    .chalan-logo-section {
-        flex-direction: column;
-    }
-
-    .chalan-logo {
-        width: 80px;
-        height: auto;
-        max-height: 80px;
-    }
-
-    .chalan-company-info h1 {
-        font-size: 20px;
-    }
-
-    .chalan-contact .contact-item {
-        font-size: 12px;
-    }
-
-    .chalan-badge {
-        font-size: 14px;
-        padding: 6px 15px;
-    }
-
-    .chalan-info-row {
-        flex-direction: column;
-        gap: 8px;
-    }
-
-    .chalan-info-cell {
-        flex: none;
-        width: 100%;
-    }
-
-    .chalan-info-cell label,
-    .chalan-info-cell span {
-        padding: 8px 10px;
-        font-size: 12px;
-    }
-
-    .chalan-items-table th,
-    .chalan-items-table td {
-        padding: 6px 4px;
-        font-size: 10px;
-    }
-
-    .table-watermark {
-        width: 90px;
-    }
-
-    .chalan-taka-row label,
-    .chalan-taka-row span {
-        padding: 8px 10px;
-        font-size: 11px;
-    }
+    /* NOTE: no .chalan-paper / document-layout overrides here. The A4 document
+       keeps its fixed geometry on every screen; the preview is scaled with a
+       transform (see .preview-viewport / .preview-scale). */
 
     .preview-controls {
         flex-direction: column;
@@ -1258,6 +1349,13 @@ body {
     .saved-section {
         padding: 15px;
         border-radius: 12px;
+    }
+
+    /* Give the A4 preview as much usable width as possible on phones; the
+       document is still scaled by the wrapper transform, so A4 geometry stays
+       fixed and the preview just renders larger. */
+    .preview-section {
+        padding: 15px;
     }
 
     .form-header {
@@ -1309,71 +1407,8 @@ body {
         font-size: 0.95rem;
     }
 
-    /* Chalan Preview - Extra small */
-    .chalan-paper {
-        padding: 10px;
-        font-size: 10px;
-    }
-
-    .chalan-header {
-        padding: 8px;
-    }
-
-    .chalan-logo {
-        width: 60px;
-        height: auto;
-        max-height: 60px;
-    }
-
-    .chalan-company-info h1 {
-        font-size: 16px;
-    }
-
-    .chalan-contact .contact-item {
-        font-size: 10px;
-        gap: 4px;
-    }
-
-    .chalan-contact .contact-item svg {
-        width: 14px;
-        height: 14px;
-    }
-
-    .chalan-badge {
-        font-size: 12px;
-        padding: 5px 12px;
-    }
-
-    .chalan-info-cell label,
-    .chalan-info-cell span {
-        padding: 6px 8px;
-        font-size: 10px;
-    }
-
-    .chalan-items-table th,
-    .chalan-items-table td {
-        padding: 4px 2px;
-        font-size: 8px;
-    }
-
-    .table-watermark {
-        width: 60px;
-    }
-
-    .chalan-taka-row {
-        flex-direction: column;
-    }
-
-    .chalan-taka-row label {
-        width: 100%;
-    }
-
-    .chalan-signatory {
-        font-size: 10px;
-        margin-top: 30px;
-        padding-top: 30px;
-        width: 150px;
-    }
+    /* No document-layout overrides: the A4 preview is scaled by the wrapper
+       (see .preview-viewport / .preview-scale), keeping A4 geometry intact. */
 
     .saved-item {
         flex-direction: column;
@@ -1396,13 +1431,8 @@ body {
         font-size: 1.2rem;
     }
 
-    .chalan-company-info h1 {
-        font-size: 14px;
-    }
-
-    .chalan-items-table .col-origin,
-    .chalan-items-table .col-packaging {
-        display: none;
+    .mode-toggle .mode-btn {
+        padding: 10px 16px;
     }
 }
 
@@ -1410,11 +1440,57 @@ body {
    PDF Export Overrides (force desktop layout)
    ============================================ */
 
-.pdf-export .chalan-paper {
+/* Screen preview scaling must never reach the PDF: html2pdf clones
+   #chalan-preview (the fixed A4 document) and the .pdf-export class forces the
+   desktop geometry. The wrapper transform is reset here too so any live-DOM
+   measurement during export sees the natural size. */
+.pdf-export .preview-viewport {
+    overflow: visible !important;
+    display: block !important;
+}
+
+.pdf-export .preview-scale {
+    transform: none !important;
+    width: auto !important;
+    height: auto !important;
+}
+
+.pdf-export .chalan-paper:not(.multi-page-preview) {
+    /* Single-page documents (Chalan, Quotation): a fixed A4 sheet. Undersized
+       by 2px for the same reason as the bill sheets — html2pdf's computed page
+       pixel height is ~1122px, while a full 297mm box renders at ~1122.5px.
+       That ~1px overshoot makes toPdf() ceil() the canvas into 2 pages (a
+       trailing blank). calc(297mm - 2px) keeps every sheet <= 1 page so the
+       DOM page count maps 1:1 to the PDF page count. The content still fits:
+       the box is far larger than the real content and overflow is hidden at
+       the page edge (never clipped mid-content). */
     width: 210mm !important;
-    min-height: 297mm !important;
+    height: calc(297mm - 2px) !important;
+    min-height: calc(297mm - 2px) !important;
     padding: 15mm !important;
+    overflow: hidden !important;
     font-size: inherit !important;
+}
+
+.pdf-export .chalan-paper:not(.multi-page-preview) .chalan-content {
+    /* Full-height A4 form: the content box stretches to the page and is laid
+       out as a column so the items table area flexes and the signature footer
+       is pinned near the bottom edge regardless of item count. Item slots are
+       fixed-height rows (44px), so this never stretches real content — it only
+       distributes the blank presentation slots. */
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+.pdf-export .chalan-content .items-table-wrapper {
+    flex: 1 1 auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+.pdf-export .chalan-content .chalan-footer {
+    margin-top: auto !important;
 }
 
 .pdf-export .chalan-header {
@@ -1472,4 +1548,66 @@ body {
 .pdf-export .quotation-table td {
     font-size: 13px !important;
     padding: 6px 8px !important;
+}
+
+.pdf-export .chalan-paper.multi-page-preview {
+    width: 210mm !important;
+    min-height: auto !important;
+    padding: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+.pdf-export .chalan-paper.multi-page-preview .bill-sheet {
+    /* Pretend A4 (1122.5px at 96dpi); shipping a full 297mm box trips
+       html2pdf's toPdf() ceil()/floor() slicing because its computed page
+       pixel height is ~1122px — the ~1px overshoot appends a blank page.
+       Undersizing the page box by a couple px guarantees each .bill-sheet
+       maps to exactly one (true, A4) PDF page with boundaries at the sheet
+       edges. The box is still far larger than the real content (~963px). */
+    width: 210mm !important;
+    height: calc(297mm - 2px) !important;
+    min-height: calc(297mm - 2px) !important;
+    padding-top: 15mm !important;
+    padding-right: 15mm !important;
+    padding-bottom: 15mm !important;
+    padding-left: 15mm !important;
+    box-sizing: border-box !important;
+    background: white !important;
+    margin: 0 auto !important;
+    box-shadow: none !important;
+    overflow: hidden !important;
+}
+
+.pdf-export .chalan-paper.multi-page-preview .bill-page {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
+    /* Full-height form per sheet: column layout so the items-table area flexes
+       and the footer/signatory stays near the bottom on every page. Blank rows
+       (fixed 44px slots) fill the grid to NORMAL_PAGE_CAPACITY / final
+       capacity, so nothing is stretched and the totals rows sit right under
+       the item grid on the last page. */
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+.pdf-export .chalan-paper.multi-page-preview .bill-sheet-break {
+    page-break-after: always !important;
+    break-after: page !important;
+}
+
+.pdf-export .chalan-content,
+.pdf-export .items-table-wrapper,
+.pdf-export .chalan-items-table {
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+}
+
+.pdf-export .chalan-footer,
+.pdf-export .chalan-taka-row,
+.pdf-export .chalan-signatory {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
 }
