@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="logo-data.js"></script>
 </head>
 
 <body>
@@ -99,6 +100,13 @@
                             <option value="exclude">Exclude Delivery Charge</option>
                         </select>
                     </div>
+                    <div class="form-group">
+                        <label for="quoteIncludeAit">AIT</label>
+                        <select id="quoteIncludeAit">
+                            <option value="include">Include AIT</option>
+                            <option value="exclude">Exclude AIT</option>
+                        </select>
+                    </div>
                 </div>
 
                 <!-- Items Section -->
@@ -179,6 +187,20 @@
                     <div class="form-group" id="billVatAmountGroup" style="display:none;">
                         <label for="billVatAmount">VAT Amount</label>
                         <input type="number" id="billVatAmount" placeholder="VAT amount" step="0.01" min="0">
+                    </div>
+                </div>
+
+                <div class="form-group-row bill-only" style="display:none;">
+                    <div class="form-group">
+                        <label for="billAitMode">AIT</label>
+                        <select id="billAitMode">
+                            <option value="exclude">Exclude AIT</option>
+                            <option value="include">Include AIT</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="billAitAmountGroup" style="display:none;">
+                        <label for="billAitAmount">AIT Amount</label>
+                        <input type="number" id="billAitAmount" placeholder="AIT amount" step="0.01" min="0">
                     </div>
                 </div>
 
