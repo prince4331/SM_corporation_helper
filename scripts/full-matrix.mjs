@@ -7,21 +7,43 @@ const PORT = 9361;
 const URL = 'file:///F:/My_projects/Cansat_accountant/chalan-generator/index.html';
 
 const SCENARIOS = [
-  { n: 1, a: false }, { n: 4, a: false }, { n: 5, a: false },
-  { n: 6, a: false }, { n: 7, a: false }, { n: 8, a: false },
-  { n: 12, a: false }, { n: 13, a: false }, { n: 17, a: false },
-  { n: 18, a: false }, { n: 20, a: false }, { n: 25, a: false },
-  { n: 29, a: false },
+  { n: 1, a: false }, { n: 5, a: false }, { n: 6, a: false },
+  { n: 7, a: false }, { n: 12, a: false }, { n: 13, a: false },
+  { n: 15, a: false }, { n: 17, a: false }, { n: 18, a: false },
+  { n: 20, a: false }, { n: 24, a: false }, { n: 25, a: false },
+  { n: 29, a: false }, { n: 30, a: false },
   { n: 1, a: true }, { n: 4, a: true }, { n: 5, a: true },
   { n: 8, a: true }, { n: 12, a: true }, { n: 13, a: true },
-  { n: 16, a: true }, { n: 20, a: true }, { n: 25, a: true },
+  { n: 16, a: true }, { n: 17, a: true }, { n: 20, a: true },
   { n: 28, a: true }, { n: 29, a: true }
 ];
 
 const CHALAN_SCENARIOS = [
   { n: 1 }, { n: 7 }, { n: 8 }, { n: 9 }, { n: 10 }, { n: 12 },
-  { n: 13 }, { n: 16 }, { n: 17 }, { n: 20 }, { n: 24 }, { n: 25 }, { n: 30 }, { n: 33 }
+  { n: 13 }, { n: 15 }, { n: 16 }, { n: 17 }, { n: 20 }, { n: 21 },
+  { n: 24 }, { n: 25 }, { n: 30 }, { n: 32 }, { n: 33 }
 ];
+
+// Front-filled pagination expectation (mirror of app.js paginateItems):
+// minimum page count P with total <= normal*(P-1)+final, then each non-final
+// page takes the maximum rows it can while leaving >= 1 item per remaining
+// page. Returns an array of row counts per page (e.g. 15/12/8 -> [12,3]).
+function expectDistribution(total, normal, final) {
+  if (total === 0) return [0];
+  if (total <= final) return [total];
+  const P = Math.ceil((total - final) / normal) + 1;
+  const dist = [];
+  let start = 0;
+  for (let p = 0; p < P - 1; p++) {
+    const remainingItems = total - start;
+    const pagesAfterCurrent = P - p - 1;
+    const take = Math.max(1, Math.min(normal, remainingItems - pagesAfterCurrent));
+    dist.push(take);
+    start += take;
+  }
+  dist.push(total - start);
+  return dist;
+}
 
 async function getWsUrl() {
   for (let i = 0; i < 40; i++) {
@@ -148,18 +170,21 @@ async function main() {
       await sleep(150);
     };
 
-    const check = async (label) => {
+    const check = async (label, expectedDist, capacities) => {
       const domDist = await cdp.evaluate(`(function(){
         const sheets = document.querySelectorAll('.bill-sheet');
         const dist = Array.from(sheets).map(s => {
-          const it = Array.from(s.querySelectorAll('tbody tr')).filter(tr => !tr.classList.contains('chalan-total-row'));
+          const it = Array.from(s.querySelectorAll('tbody tr')).filter(tr => !tr.classList.contains('chalan-total-row') && tr.querySelector('td').textContent.trim() !== '');
           return it.length + (s.querySelector('tr.chalan-total-row') ? '*' : '');
+        });
+        const blanks = Array.from(sheets).map(s => {
+          return Array.from(s.querySelectorAll('tbody tr')).filter(tr => !tr.classList.contains('chalan-total-row') && tr.querySelector('td').textContent.trim() === '').length;
         });
         const heights = Array.from(sheets).map(s => {
           const r = s.getBoundingClientRect();
           return { h: Math.round(r.height * 100) / 100, css: getComputedStyle(s).height };
         });
-        return JSON.stringify({ pages: dist.length, dist, heights });
+        return JSON.stringify({ pages: dist.length, dist, blanks, heights });
       })()`);
       const dom = JSON.parse(domDist);
 
@@ -185,26 +210,92 @@ async function main() {
         return JSON.stringify({ info, err: errCap, alerts: alertMsgs });
       })()`, true);
       const cap = JSON.parse(res);
-      console.log(JSON.stringify({
+
+      // Front-fill invariant checks
+      const actualDist = dom.dist.map(d => parseInt(d, 10));
+      const issues = [];
+      if (JSON.stringify(actualDist) !== JSON.stringify(expectedDist)) {
+        issues.push(`distribution mismatch: expected [${expectedDist}] got [${actualDist}]`);
+      }
+      const finalPageIdx = actualDist.length - 1;
+      const finalCap = capacities.final;
+      const normalCap = capacities.normal;
+      if (actualDist.length > 0 && actualDist[finalPageIdx] > finalCap) {
+        issues.push(`final page ${actualDist[finalPageIdx]} exceeds final capacity ${finalCap}`);
+      }
+      for (let i = 0; i < actualDist.length - 1; i++) {
+        if (actualDist[i] > normalCap) {
+          issues.push(`non-final page ${i} has ${actualDist[i]} > normal capacity ${normalCap}`);
+        }
+      }
+      // Blank-before-real invariant: a non-final page must be front-filled
+      // (blank rows only after real allocation); the first non-full page
+      // implies every later page has only its required minimum.
+      for (let i = 0; i < actualDist.length - 1; i++) {
+        if (actualDist[i] < normalCap) {
+          const laterSum = actualDist.slice(i + 1).reduce((a, b) => a + b, 0);
+          if (laterSum > 1) {
+            issues.push(`page ${i} not front-filled: ${actualDist[i]} real rows with ${laterSum} later rows that could fit`);
+          }
+          break;
+        }
+      }
+
+      const pageOk = cap.info ? cap.info.pages === dom.pages : false;
+      if (cap.info && !pageOk) {
+        issues.push(`PDF pages ${cap.info.pages} != DOM pages ${dom.pages}`);
+      }
+      if (cap.err) {
+        issues.push('pdf error: ' + cap.err.slice(0, 200));
+      }
+      if (cap.alerts && cap.alerts.length) {
+        issues.push('alerts: ' + JSON.stringify(cap.alerts));
+      }
+
+      // Blank-row invariant: blank rows may only appear on the final page OR
+      // the last non-final page (which is the page just before the final page;
+      // front-fill makes it the first page that cannot accept another real
+      // item without emptying a later page). Every earlier non-final page must
+      // be full (0 blanks).
+      const blankArr = dom.blanks;
+      for (let i = 0; i < blankArr.length - 1; i++) {
+        if (blankArr[i] > 0 && i < blankArr.length - 2) {
+          issues.push(`page ${i} has ${blankArr[i]} blank rows while a movable real item exists on a later page`);
+        }
+      }
+
+      const result = {
         scenario: label,
-        dom: dom,
-        pdf: cap.info ? { pages: cap.info.pages, sizes: cap.info.sizes, bytes: cap.info.bytes } : null,
-        err: cap.err ? cap.err.slice(0, 200) : null,
-        alerts: cap.alerts
-      }));
+        pass: issues.length === 0,
+        issues,
+        dom,
+        pdf: cap.info ? { pages: cap.info.pages, sizes: cap.info.sizes, bytes: cap.info.bytes } : null
+      };
+      console.log(JSON.stringify(result));
+      return result;
     };
 
+    const results = [];
     for (const sc of SCENARIOS) {
       await runBill(sc);
-      await check(`bill n=${sc.n}${sc.a ? ' AIT' : ''}`);
+      const final = sc.a ? 4 : 5;
+      const expected = expectDistribution(sc.n, 12, final);
+      results.push(await check(`bill n=${sc.n}${sc.a ? ' AIT' : ''}`, expected, { normal: 12, final }));
     }
 
     await cdp.evaluate('(function(){ switchMode("chalan"); return "ok"; })()');
     await sleep(120);
     for (const sc of CHALAN_SCENARIOS) {
       await runChalan(sc);
-      await check(`chalan n=${sc.n}`);
+      const expected = expectDistribution(sc.n, 12, 8);
+      results.push(await check(`chalan n=${sc.n}`, expected, { normal: 12, final: 8 }));
     }
+
+    const failed = results.filter(r => !r.pass);
+    console.log('=== SUMMARY ===');
+    console.log(`TOTAL=${results.length} PASS=${results.length - failed.length} FAIL=${failed.length}`);
+    failed.forEach(r => console.log('FAILED:', r.scenario, JSON.stringify(r.issues)));
+    if (failed.length > 0) process.exitCode = 1;
   } finally {
     chrome.kill();
   }

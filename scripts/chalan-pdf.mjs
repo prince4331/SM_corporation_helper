@@ -49,6 +49,24 @@ class CDP {
   }
 }
 
+// Front-filled pagination expectation (mirror of app.js paginateItems).
+function expectDistribution(total, normal, final) {
+  if (total === 0) return [0];
+  if (total <= final) return [total];
+  const P = Math.ceil((total - final) / normal) + 1;
+  const dist = [];
+  let start = 0;
+  for (let p = 0; p < P - 1; p++) {
+    const remainingItems = total - start;
+    const pagesAfterCurrent = P - p - 1;
+    const take = Math.max(1, Math.min(normal, remainingItems - pagesAfterCurrent));
+    dist.push(take);
+    start += take;
+  }
+  dist.push(total - start);
+  return dist;
+}
+
 async function main() {
   const chrome = spawn(CHROME, [
     '--headless=new', '--disable-gpu', `--remote-debugging-port=${PORT}`,
@@ -65,6 +83,7 @@ async function main() {
     await sleep(1800);
     await cdp.evaluate(`switchMode('chalan');`);
 
+    const results = [];
     // LOGO_DATA_URI is defined in logo-data.js loaded via script tag
     for (const n of [1, 8, 13, 20, 30]) {
       await cdp.evaluate(`(function(){
@@ -106,18 +125,35 @@ async function main() {
         const sheets = document.querySelectorAll('.bill-sheet').length;
         const pageNos = Array.from(document.querySelectorAll('.bill-page-no')).map(e => e.textContent);
         const pdfExportLeft = document.body.classList.contains('pdf-export');
-        return JSON.stringify({ info, err: errCap, alerts: alertMsgs, domSheets: sheets, pageNos, pdfExportLeft });
+        const dist = Array.from(document.querySelectorAll('.bill-sheet')).map(s => {
+          return Array.from(s.querySelectorAll('tbody tr')).filter(tr => !tr.classList.contains('chalan-total-row') && tr.querySelector('td').textContent.trim() !== '').length;
+        });
+        return JSON.stringify({ info, err: errCap, alerts: alertMsgs, domSheets: sheets, pageNos, pdfExportLeft, dist });
       })()`, true);
       const cap = JSON.parse(res);
+      const expectedDist = expectDistribution(n, 12, 8);
+      const issues = [];
+      if (JSON.stringify(cap.dist) !== JSON.stringify(expectedDist)) {
+        issues.push(`distribution mismatch: expected [${expectedDist}] got [${cap.dist}]`);
+      }
+      if (cap.info && cap.info.pages !== cap.domSheets) {
+        issues.push(`PDF pages ${cap.info.pages} != DOM sheets ${cap.domSheets}`);
+      }
+      if (cap.err) issues.push('pdf error: ' + cap.err.slice(0, 150));
+      if (cap.pdfExportLeft) issues.push('pdf-export class left on body');
       console.log(JSON.stringify({
         scenario: `n=${n}`,
+        pass: issues.length === 0,
+        issues,
         pdf: cap.info ? { pages: cap.info.pages, sizes: cap.info.sizes, bytes: cap.info.bytes, name: cap.info.name } : null,
         domSheets: cap.domSheets,
+        dist: cap.dist,
         pageNos: cap.pageNos,
         pdfExportLeft: cap.pdfExportLeft,
         err: cap.err ? cap.err.slice(0, 150) : null,
         alerts: cap.alerts
       }));
+      results.push({ n, pass: issues.length === 0, issues });
     }
 
     // Repeated downloads (5x same scenario) - performance & stability
@@ -156,6 +192,11 @@ async function main() {
       return JSON.stringify({ count, pages, bytes, ms, errs: errs.length });
     })()`, true);
     console.log('REPEAT5=' + rep);
+    const failed = results.filter(r => !r.pass);
+    console.log('=== SUMMARY ===');
+    console.log(`TOTAL=${results.length} PASS=${results.length - failed.length} FAIL=${failed.length}`);
+    failed.forEach(r => console.log('FAILED:', 'n=' + r.n, JSON.stringify(r.issues)));
+    if (failed.length > 0) process.exitCode = 1;
   } finally {
     chrome.kill();
   }

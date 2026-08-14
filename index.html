@@ -271,8 +271,17 @@
                 </button>
             </div>
 
-            <div id="chalan-preview" class="chalan-paper">
-                <!-- Chalan content will be generated here -->
+            <!-- Screen preview scaling wrapper: the fixed A4 document
+                 (#chalan-preview) keeps its true 210mm width; on narrow
+                 screens it is visually scaled down via transform so the whole
+                 page stays visible. The transform lives on .preview-scale
+                 only, so it is never part of the .pdf-export clone or print. -->
+            <div class="preview-viewport">
+                <div class="preview-scale">
+                    <div id="chalan-preview" class="chalan-paper">
+                        <!-- Chalan content will be generated here -->
+                    </div>
+                </div>
             </div>
         </section>
     </div>

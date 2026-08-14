@@ -52,6 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
     attachDocNumberListener();
     attachBillVatToggle();
     attachBillAitToggle();
+    setupPreviewScaling();
 });
 
 function initializeChalanNumber() {
@@ -265,18 +266,19 @@ function normalizeMoney(value) {
 //   normalCapacity - max item rows on a non-final page (no totals/footer)
 //   finalCapacity  - max item rows on the final page (totals/footer present)
 //
-// Strategy (minimum pages + reasonably balanced rows):
+// Strategy (minimum pages + front-filled rows):
 //   1. Compute the minimum number of pages P such that the final page holds at
-//      most finalCapacity rows and every earlier page at most normalCapacity.
-//   2. Pick a final-page row count F close to the "even split" total/P, capped
-//      at finalCapacity and never smaller than what the earlier pages require.
-//   3. Spread the remaining rows as evenly as possible over the P-1 non-final
-//      pages (earlier pages get at most one extra row each, never exceeding
-//      normalCapacity).
+//      most finalCapacity rows and every earlier page at most normalCapacity:
+//        total <= normalCapacity * (P - 1) + finalCapacity
+//   2. Allocate rows from the FRONT. Each non-final page takes the maximum
+//      number of real items it can hold while still leaving at least one item
+//      for every remaining page (so the final page always gets >= 1 real item
+//      and never exceeds finalCapacity).
 //
-// This avoids both the "tiny page 1 + crowded page 2" layout and the
-// "12 + 1" layout where the final page holds a single lonely row: pages end up
-// balanced (e.g. 13 items -> [8, 5], 20 items -> [8, 7, 5], no AIT).
+// Real items are therefore front-loaded: an earlier page never shows a blank
+// slot while a real item that could legally occupy it still exists on a later
+// page. Blank rows are only presentation fillers added after allocation.
+// Examples (no AIT): 13 items -> [12, 1], 20 -> [12, 7, 1], 29 -> [12, 12, 5].
 function paginateItems(items, normalCapacity, finalCapacity) {
     const total = items.length;
     if (total === 0) {
@@ -287,29 +289,14 @@ function paginateItems(items, normalCapacity, finalCapacity) {
     }
 
     const P = Math.ceil((total - finalCapacity) / normalCapacity) + 1;
-    const nonFinalPages = P - 1;
-
-    // Desired final-page size: the even split per page, but never above the
-    // final page's capacity.
-    let finalCount = Math.floor(total / P);
-    if (finalCount > finalCapacity) {
-        finalCount = finalCapacity;
-    }
-    // The final page must still leave room for the earlier pages: it has to be
-    // at least total - (nonFinalPages * normalCapacity), and at least 1.
-    const minFinalCount = Math.max(1, total - nonFinalPages * normalCapacity);
-    if (finalCount < minFinalCount) {
-        finalCount = minFinalCount;
-    }
-
-    const remaining = total - finalCount;
-    const base = Math.floor(remaining / nonFinalPages);
-    const extra = remaining % nonFinalPages;
-
     const pages = [];
     let start = 0;
-    for (let p = 0; p < nonFinalPages; p++) {
-        const take = base + (p < extra ? 1 : 0);
+    for (let p = 0; p < P - 1; p++) {
+        const remainingItems = total - start;
+        const pagesAfterCurrent = P - p - 1;
+        // Take as many real items as this page can hold, while leaving at least
+        // one real item for every remaining page (including the final page).
+        const take = Math.max(1, Math.min(normalCapacity, remainingItems - pagesAfterCurrent));
         pages.push({ items: items.slice(start, start + take), isLastPage: false });
         start += take;
     }
@@ -318,9 +305,9 @@ function paginateItems(items, normalCapacity, finalCapacity) {
     return pages;
 }
 
-// Chalan uses the same balanced pagination strategy as the Bill, but with its
-// own measured page capacities (12 items on a normal page, 8 on the final page
-// which also carries the quantity-total row, Quantity-in-Word row and
+// Chalan uses the same front-filled pagination strategy as the Bill, but with
+// its own measured page capacities (12 items on a normal page, 8 on the final
+// page which also carries the quantity-total row, Quantity-in-Word row and
 // signatory footer). The distribution itself is identical to paginateItems().
 function paginateChalanItems(items, normalCapacity, finalCapacity) {
     return paginateItems(items, normalCapacity, finalCapacity);
@@ -1258,12 +1245,74 @@ function showInputForm() {
     inputSection.classList.remove('hidden');
     savedSection.classList.add('hidden');
     previewSection.classList.add('hidden');
+    requestAnimationFrame(updatePreviewScale);
 }
 
 function showPreviewSection() {
     inputSection.classList.add('hidden');
     savedSection.classList.add('hidden');
     previewSection.classList.remove('hidden');
+    requestAnimationFrame(updatePreviewScale);
+}
+
+// ============================================
+// Responsive preview scaling
+// ============================================
+
+// The A4 document (#chalan-preview) is ALWAYS a fixed 210mm sheet with real
+// A4 geometry - its width must never depend on the viewport or pagination
+// capacities / PDF page count / centering would break. On narrow screens we
+// only *visually* scale it down via a transform on the wrapper
+// (.preview-scale); the wrapper reserves the scaled height so pages never
+// overlap and the browser never gains a horizontal scrollbar.
+//
+// The transform lives on the wrapper, never on the document itself, so:
+//   - .pdf-export (html2pdf clones #chalan-preview) is unaffected
+//   - @media print resets the wrapper back to natural size
+//   - a PDF from a 375px phone is geometrically identical to one from a
+//     1440px desktop.
+let previewScale = 1;
+
+function updatePreviewScale() {
+    const viewport = document.querySelector('.preview-viewport');
+    const wrapper = document.querySelector('.preview-scale');
+    if (!viewport || !wrapper || !chalanPreview) return;
+    if (!chalanPreview.innerHTML.trim()) return;
+
+    const naturalWidth = parseFloat(getComputedStyle(chalanPreview).width);
+    if (!naturalWidth || !isFinite(naturalWidth)) return;
+
+    const availableWidth = viewport.clientWidth;
+    if (!availableWidth) return;
+
+    // Natural (untransformed) layout height: the whole stacked document.
+    const naturalHeight = chalanPreview.getBoundingClientRect().height / previewScale;
+
+    const scale = Math.min(1, availableWidth / naturalWidth);
+    previewScale = scale;
+
+    if (scale >= 1) {
+        wrapper.style.transform = '';
+        wrapper.style.width = '';
+        wrapper.style.height = '';
+        return;
+    }
+
+    wrapper.style.transformOrigin = 'top left';
+    wrapper.style.transform = `scale(${scale})`;
+    wrapper.style.width = `${(naturalWidth * scale).toFixed(3)}px`;
+    wrapper.style.height = `${(naturalHeight * scale).toFixed(3)}px`;
+}
+
+function setupPreviewScaling() {
+    const viewport = document.querySelector('.preview-viewport');
+    if (!viewport || typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver(() => updatePreviewScale());
+    observer.observe(viewport);
+    observer.observe(chalanPreview);
+    window.addEventListener('resize', updatePreviewScale);
+    updatePreviewScale();
 }
 
 function showSavedChalans() {

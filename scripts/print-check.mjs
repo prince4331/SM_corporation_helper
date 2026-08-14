@@ -59,6 +59,24 @@ function analyzePdf(buffer) {
   return { pageCount, sizes };
 }
 
+// Front-filled pagination expectation (mirror of app.js paginateItems).
+function expectDistribution(total, normal, final) {
+  if (total === 0) return [0];
+  if (total <= final) return [total];
+  const P = Math.ceil((total - final) / normal) + 1;
+  const dist = [];
+  let start = 0;
+  for (let p = 0; p < P - 1; p++) {
+    const remainingItems = total - start;
+    const pagesAfterCurrent = P - p - 1;
+    const take = Math.max(1, Math.min(normal, remainingItems - pagesAfterCurrent));
+    dist.push(take);
+    start += take;
+  }
+  dist.push(total - start);
+  return dist;
+}
+
 async function main() {
   const chrome = spawn(CHROME, [
     '--headless=new', '--disable-gpu', `--remote-debugging-port=${PORT}`,
@@ -124,11 +142,11 @@ async function main() {
       await sleep(150);
     };
 
-    const check = async (label) => {
+    const check = async (label, expectedDist, capacities) => {
       const dom = await cdp.evaluate(`(function(){
         const sheets = document.querySelectorAll('.bill-sheet');
         const dist = Array.from(sheets).map(s => {
-          const it = Array.from(s.querySelectorAll('tbody tr')).filter(tr => !tr.classList.contains('chalan-total-row'));
+          const it = Array.from(s.querySelectorAll('tbody tr')).filter(tr => !tr.classList.contains('chalan-total-row') && tr.querySelector('td').textContent.trim() !== '');
           return it.length + (s.querySelector('tr.chalan-total-row') ? '*' : '');
         });
         return JSON.stringify({ pages: dist.length, dist });
@@ -156,28 +174,64 @@ async function main() {
       const pbuf = Buffer.from(pdf.data, 'base64');
       const info = analyzePdf(pbuf);
 
-      console.log(JSON.stringify({
+      // Front-fill invariants
+      const actualDist = JSON.parse(dom).dist.map(d => parseInt(d, 10));
+      const issues = [];
+      if (JSON.stringify(actualDist) !== JSON.stringify(expectedDist)) {
+        issues.push(`distribution mismatch: expected [${expectedDist}] got [${actualDist}]`);
+      }
+      const finalCap = capacities.final;
+      const normalCap = capacities.normal;
+      const last = actualDist.length - 1;
+      if (actualDist[last] > finalCap) issues.push(`final page exceeds capacity ${finalCap}`);
+      for (let i = 0; i < last; i++) {
+        if (actualDist[i] > normalCap) issues.push(`page ${i} exceeds normal capacity`);
+        if (actualDist[i] < normalCap) {
+          const later = actualDist.slice(i + 1).reduce((a, b) => a + b, 0);
+          if (later > 1) issues.push(`page ${i} not front-filled (${actualDist[i]} with ${later} later)`);
+          break;
+        }
+      }
+      if (info.pageCount !== JSON.parse(dom).pages) issues.push(`print pages ${info.pageCount} != DOM ${JSON.parse(dom).pages}`);
+      JSON.parse(geo).forEach((g, i) => {
+        if (g.bottomOverflow > 0.5) issues.push(`sheet ${i} bottom overflow ${g.bottomOverflow}`);
+      });
+
+      const result = {
         scenario: label,
+        pass: issues.length === 0,
+        issues,
         dom: JSON.parse(dom),
         printPdfPages: info.pageCount,
         printPdfSizes: info.sizes,
         geometry: JSON.parse(geo)
-      }));
+      };
+      console.log(JSON.stringify(result));
+      return result;
     };
 
     await cdp.evaluate('(function(){ switchMode("bill"); return "ok"; })()');
     await sleep(120);
-    for (const sc of [{ n: 5, a: false }, { n: 13, a: false }, { n: 17, a: false }, { n: 20, a: false }, { n: 16, a: true }]) {
+    const billScenarios = [{ n: 1, a: false }, { n: 5, a: false }, { n: 6, a: false }, { n: 7, a: false }, { n: 12, a: false }, { n: 13, a: false }, { n: 15, a: false }, { n: 17, a: false }, { n: 18, a: false }, { n: 20, a: false }, { n: 24, a: false }, { n: 25, a: false }, { n: 29, a: false }, { n: 30, a: false }, { n: 1, a: true }, { n: 4, a: true }, { n: 5, a: true }, { n: 8, a: true }, { n: 12, a: true }, { n: 13, a: true }, { n: 16, a: true }, { n: 17, a: true }, { n: 20, a: true }, { n: 28, a: true }, { n: 29, a: true }];
+    const results = [];
+    for (const sc of billScenarios) {
       await runBill(sc);
-      await check(`bill n=${sc.n}${sc.a ? ' AIT' : ''}`);
+      const final = sc.a ? 4 : 5;
+      results.push(await check(`bill n=${sc.n}${sc.a ? ' AIT' : ''}`, expectDistribution(sc.n, 12, final), { normal: 12, final }));
     }
 
     await cdp.evaluate('(function(){ switchMode("chalan"); return "ok"; })()');
     await sleep(120);
-    for (const sc of [{ n: 5 }, { n: 8 }, { n: 9 }, { n: 13 }, { n: 20 }, { n: 25 }, { n: 30 }]) {
+    for (const sc of [{ n: 1 }, { n: 7 }, { n: 8 }, { n: 9 }, { n: 10 }, { n: 12 }, { n: 13 }, { n: 15 }, { n: 16 }, { n: 17 }, { n: 20 }, { n: 21 }, { n: 24 }, { n: 25 }, { n: 30 }, { n: 32 }, { n: 33 }]) {
       await runChalan(sc);
-      await check(`chalan n=${sc.n}`);
+      results.push(await check(`chalan n=${sc.n}`, expectDistribution(sc.n, 12, 8), { normal: 12, final: 8 }));
     }
+
+    const failed = results.filter(r => !r.pass);
+    console.log('=== SUMMARY ===');
+    console.log(`TOTAL=${results.length} PASS=${results.length - failed.length} FAIL=${failed.length}`);
+    failed.forEach(r => console.log('FAILED:', r.scenario, JSON.stringify(r.issues)));
+    if (failed.length > 0) process.exitCode = 1;
   } finally {
     chrome.kill();
   }

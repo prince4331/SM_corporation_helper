@@ -57,6 +57,24 @@ function analyzePdf(buffer) {
   return { pageCount, sizes };
 }
 
+// Front-filled pagination expectation (mirror of app.js paginateItems).
+function expectDistribution(total, normal, final) {
+  if (total === 0) return [0];
+  if (total <= final) return [total];
+  const P = Math.ceil((total - final) / normal) + 1;
+  const dist = [];
+  let start = 0;
+  for (let p = 0; p < P - 1; p++) {
+    const remainingItems = total - start;
+    const pagesAfterCurrent = P - p - 1;
+    const take = Math.max(1, Math.min(normal, remainingItems - pagesAfterCurrent));
+    dist.push(take);
+    start += take;
+  }
+  dist.push(total - start);
+  return dist;
+}
+
 async function main() {
   const chrome = spawn(CHROME, [
     '--headless=new', '--disable-gpu', `--remote-debugging-port=${PORT}`,
@@ -73,7 +91,8 @@ async function main() {
     await sleep(1800);
     await cdp.evaluate(`switchMode('chalan');`);
 
-    const scenarios = [1, 7, 8, 9, 10, 12, 13, 16, 17, 20, 24, 25, 30, 33];
+    const scenarios = [1, 7, 8, 9, 10, 12, 13, 15, 16, 17, 20, 21, 24, 25, 30, 32, 33];
+    const results = [];
 
     for (const n of scenarios) {
       await cdp.evaluate(`(function(){
@@ -139,7 +158,42 @@ async function main() {
       const pbuf = Buffer.from(pdf.data, 'base64');
       const info = analyzePdf(pbuf);
 
-      console.log(`CHALAN n=${n}: dom=${dom} print=${JSON.stringify(info)}`);
+      // Front-fill invariant checks
+      const parsed = JSON.parse(dom);
+      const actualDist = parsed.map(p => p.itemRows);
+      const expectedDist = expectDistribution(n, 12, 8);
+      const issues = [];
+      if (JSON.stringify(actualDist) !== JSON.stringify(expectedDist)) {
+        issues.push(`distribution mismatch: expected [${expectedDist}] got [${actualDist}]`);
+      }
+      const last = actualDist.length - 1;
+      if (last >= 0 && actualDist[last] > 8) issues.push(`final page exceeds capacity 8`);
+      for (let i = 0; i < last; i++) {
+        if (actualDist[i] > 12) issues.push(`page ${i} exceeds normal capacity 12`);
+        if (actualDist[i] < 12) {
+          const later = actualDist.slice(i + 1).reduce((a, b) => a + b, 0);
+          if (later > 1) issues.push(`page ${i} not front-filled (${actualDist[i]} with ${later} later)`);
+          break;
+        }
+      }
+      parsed.forEach((p, i) => {
+        if (i < last && p.blankRows > 0 && actualDist[i] < 12 && actualDist.slice(i + 1).reduce((a, b) => a + b, 0) > 1) {
+          issues.push(`blank rows on page ${i} while later real items exist`);
+        }
+        if (i === last) {
+          if (p.totalRows !== 1) issues.push(`final page missing single total row`);
+          if (!p.taka) issues.push(`final page missing Quantity-in-Word`);
+          if (!p.sign) issues.push(`final page missing signatory`);
+        }
+        if (i < last && (p.taka || p.sign)) issues.push(`non-final page carries final-only footer`);
+        if (i < last && !p.hasWatermark) issues.push(`page ${i} missing watermark`);
+        if (i < last && !p.headerShown) issues.push(`page ${i} missing repeated header`);
+        if (p.overflow > 0.5) issues.push(`page ${i} bottom overflow ${p.overflow}`);
+      });
+      if (info.pageCount !== parsed.length) issues.push(`print pages ${info.pageCount} != DOM ${parsed.length}`);
+
+      console.log(`CHALAN n=${n}: ${issues.length === 0 ? 'PASS' : 'FAIL ' + JSON.stringify(issues)} dom=${dom} print=${JSON.stringify(info)}`);
+      results.push({ n, pass: issues.length === 0, issues });
     }
 
     // Reset check: New Chalan must produce single clean form
@@ -151,6 +205,11 @@ async function main() {
       return JSON.stringify({ sheets: sheets.length, html: paper.innerHTML.slice(0, 120) });
     })()`);
     console.log('RESET=' + reset);
+    const failed = results.filter(r => !r.pass);
+    console.log('=== SUMMARY ===');
+    console.log(`TOTAL=${results.length} PASS=${results.length - failed.length} FAIL=${failed.length}`);
+    failed.forEach(r => console.log('FAILED:', 'chalan n=' + r.n, JSON.stringify(r.issues)));
+    if (failed.length > 0) process.exitCode = 1;
   } finally {
     chrome.kill();
   }

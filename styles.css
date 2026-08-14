@@ -546,6 +546,31 @@ body {
 }
 
 /* ============================================
+   Preview Viewport (responsive A4 scaling)
+   ============================================
+
+   The document itself (#chalan-preview) is ALWAYS a fixed 210mm A4 sheet at
+   its natural size. On narrow screens a small script scales the wrapper
+   (.preview-scale) down with a pure transform and reserves the scaled layout
+   height, so the whole page remains visible without horizontal overflow.
+
+   The transform lives on the wrapper only - never on the document - so the
+   .pdf-export clone (which copies #chalan-preview) and @media print are
+   completely unaffected and always produce a full-size A4 page.
+   */
+
+.preview-viewport {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.preview-scale {
+    transform-origin: top left;
+}
+
+/* ============================================
    Chalan Paper (A4 Format)
    ============================================ */
 
@@ -1099,6 +1124,19 @@ body {
         min-height: auto;
     }
 
+    /* Screen preview scaling must never affect print: the wrapper is reset to
+       natural size and the document prints at full fixed A4 geometry. */
+    .preview-viewport {
+        overflow: visible !important;
+        display: block !important;
+    }
+
+    .preview-scale {
+        transform: none !important;
+        width: auto !important;
+        height: auto !important;
+    }
+
     .chalan-paper {
         width: 210mm;
         height: 290mm;
@@ -1208,10 +1246,21 @@ body {
         padding: 30px;
     }
 
-    .chalan-paper {
-        width: 100%;
-        min-height: auto;
-        padding: 20px;
+    /* Two-column form layout on tablets/small laptops; the document preview is
+       handled by the JS preview scaling (fixed A4, visually scaled), so no
+       width override is applied to .chalan-paper here. */
+    .form-group-row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+    }
+
+    .form-group-row .form-group {
+        margin-bottom: 0;
+    }
+
+    .form-group.flex-2 {
+        grid-column: span 2;
     }
 }
 
@@ -1236,17 +1285,22 @@ body {
         height: 80px;
     }
 
+    /* Forms collapse to a single column on phones/portrait tablets. */
     .form-group-row {
-        flex-direction: column;
-        gap: 0;
+        grid-template-columns: 1fr;
+        gap: 12px;
     }
 
     .form-group.flex-2 {
-        flex: 1;
+        grid-column: span 1;
     }
 
     .form-actions {
         flex-direction: column;
+    }
+
+    .mode-toggle {
+        flex-wrap: wrap;
     }
 
     .items-header {
@@ -1264,76 +1318,9 @@ body {
         padding: 8px 6px;
     }
 
-    /* Chalan Preview */
-    .chalan-paper {
-        width: 100%;
-        min-height: auto;
-        padding: 15px;
-        font-size: 11px;
-    }
-
-    .chalan-header {
-        flex-direction: column;
-        align-items: center;
-        text-align: center;
-        gap: 15px;
-        padding: 10px;
-    }
-
-    .chalan-logo-section {
-        flex-direction: column;
-    }
-
-    .chalan-logo {
-        width: 80px;
-        height: auto;
-        max-height: 80px;
-    }
-
-    .chalan-company-info h1 {
-        font-size: 20px;
-    }
-
-    .chalan-contact .contact-item {
-        font-size: 12px;
-    }
-
-    .chalan-badge {
-        font-size: 14px;
-        padding: 6px 15px;
-    }
-
-    .chalan-info-row {
-        flex-direction: column;
-        gap: 8px;
-    }
-
-    .chalan-info-cell {
-        flex: none;
-        width: 100%;
-    }
-
-    .chalan-info-cell label,
-    .chalan-info-cell span {
-        padding: 8px 10px;
-        font-size: 12px;
-    }
-
-    .chalan-items-table th,
-    .chalan-items-table td {
-        padding: 6px 4px;
-        font-size: 10px;
-    }
-
-    .table-watermark {
-        width: 90px;
-    }
-
-    .chalan-taka-row label,
-    .chalan-taka-row span {
-        padding: 8px 10px;
-        font-size: 11px;
-    }
+    /* NOTE: no .chalan-paper / document-layout overrides here. The A4 document
+       keeps its fixed geometry on every screen; the preview is scaled with a
+       transform (see .preview-viewport / .preview-scale). */
 
     .preview-controls {
         flex-direction: column;
@@ -1362,6 +1349,13 @@ body {
     .saved-section {
         padding: 15px;
         border-radius: 12px;
+    }
+
+    /* Give the A4 preview as much usable width as possible on phones; the
+       document is still scaled by the wrapper transform, so A4 geometry stays
+       fixed and the preview just renders larger. */
+    .preview-section {
+        padding: 15px;
     }
 
     .form-header {
@@ -1413,71 +1407,8 @@ body {
         font-size: 0.95rem;
     }
 
-    /* Chalan Preview - Extra small */
-    .chalan-paper {
-        padding: 10px;
-        font-size: 10px;
-    }
-
-    .chalan-header {
-        padding: 8px;
-    }
-
-    .chalan-logo {
-        width: 60px;
-        height: auto;
-        max-height: 60px;
-    }
-
-    .chalan-company-info h1 {
-        font-size: 16px;
-    }
-
-    .chalan-contact .contact-item {
-        font-size: 10px;
-        gap: 4px;
-    }
-
-    .chalan-contact .contact-item svg {
-        width: 14px;
-        height: 14px;
-    }
-
-    .chalan-badge {
-        font-size: 12px;
-        padding: 5px 12px;
-    }
-
-    .chalan-info-cell label,
-    .chalan-info-cell span {
-        padding: 6px 8px;
-        font-size: 10px;
-    }
-
-    .chalan-items-table th,
-    .chalan-items-table td {
-        padding: 4px 2px;
-        font-size: 8px;
-    }
-
-    .table-watermark {
-        width: 60px;
-    }
-
-    .chalan-taka-row {
-        flex-direction: column;
-    }
-
-    .chalan-taka-row label {
-        width: 100%;
-    }
-
-    .chalan-signatory {
-        font-size: 10px;
-        margin-top: 30px;
-        padding-top: 30px;
-        width: 150px;
-    }
+    /* No document-layout overrides: the A4 preview is scaled by the wrapper
+       (see .preview-viewport / .preview-scale), keeping A4 geometry intact. */
 
     .saved-item {
         flex-direction: column;
@@ -1500,19 +1431,29 @@ body {
         font-size: 1.2rem;
     }
 
-    .chalan-company-info h1 {
-        font-size: 14px;
-    }
-
-    .chalan-items-table .col-origin,
-    .chalan-items-table .col-packaging {
-        display: none;
+    .mode-toggle .mode-btn {
+        padding: 10px 16px;
     }
 }
 
 /* ============================================
    PDF Export Overrides (force desktop layout)
    ============================================ */
+
+/* Screen preview scaling must never reach the PDF: html2pdf clones
+   #chalan-preview (the fixed A4 document) and the .pdf-export class forces the
+   desktop geometry. The wrapper transform is reset here too so any live-DOM
+   measurement during export sees the natural size. */
+.pdf-export .preview-viewport {
+    overflow: visible !important;
+    display: block !important;
+}
+
+.pdf-export .preview-scale {
+    transform: none !important;
+    width: auto !important;
+    height: auto !important;
+}
 
 .pdf-export .chalan-paper:not(.multi-page-preview) {
     /* Single-page documents (Chalan, Quotation): a fixed A4 sheet. Undersized
